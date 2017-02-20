@@ -140,8 +140,7 @@ wish_rpc_id_t wish_rpc_client(wish_rpc_client_t *c, char *op_str,
         /* args array is user-supplied */
         if (bson_write_embedded_doc_or_array(rpc_msg, rpc_msg_max_len, 
                 "args", args_array, BSON_KEY_ARRAY) == BSON_FAIL) {
-            WISHDEBUG(LOG_CRITICAL, "Could not write args to RPC message");
-            bson_visit(args_array, elem_visitor);
+            bson_visit("Could not write args to RPC message", args_array);
         }
     }
     else {
@@ -200,8 +199,7 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t *c, char *op,
         entry = entry->next;
     }
     
-    //WISHDEBUG(LOG_CRITICAL,"wish_app_core: BSON Dump\n");
-    //bson_visit(bs.data, elem_visitor);    
+    //bson_visit("wish_app_core: BSON Dump", bs.data);
     
     return id;
 }
@@ -375,8 +373,7 @@ int wish_rpc_passthru_context(wish_rpc_client_t* client, bson* bs, rpc_client_ca
     
     memcpy(buffer, bson_data(bs), len);
 
-    //WISHDEBUG(LOG_CRITICAL, "passthru...");
-    //bson_visit(buffer, elem_visitor);
+    //bson_visit("passthru...", buffer);
     
     bson_iterator it;
     bson_find_from_buffer(&it, buffer, "id");
@@ -393,7 +390,7 @@ int wish_rpc_passthru_context(wish_rpc_client_t* client, bson* bs, rpc_client_ca
     bson_inplace_set_long(&it, id);
     
     //WISHDEBUG(LOG_CRITICAL, "Switched id in passthru: %i for %i", e->passthru_id, id);
-    //bson_visit(buffer, elem_visitor);
+    //bson_visit("Switched id in passthru:", buffer);
     
     client->send(client->send_ctx, buffer, len);
     return id;
@@ -575,8 +572,7 @@ void wish_rpc_server_emit_broadcast(wish_rpc_server_t* s, char* op, const uint8_
     LL_FOREACH(s->request_list_head, request) {
 
         if (strncmp(request->request_ctx.op_str, op, MAX_RPC_OP_LEN) == 0) {
-            //WISHDEBUG(LOG_CRITICAL, "emit_broadcast:");
-            //bson_visit((uint8_t*)data, elem_visitor);
+            //bson_visit("emit_broadcast:", (uint8_t*)data);
             //WISHDEBUG(LOG_CRITICAL, "(end)");
 
             wish_rpc_server_emit(&(request->request_ctx), data, data_len);
@@ -602,15 +598,13 @@ int wish_rpc_client_handle_res(wish_rpc_client_t *c, void *ctx, uint8_t *data, s
              * ack" */
             sig = true;
         } else if (bson_get_int32(data, "err", &id) == BSON_SUCCESS) {
-            //WISHDEBUG(LOG_CRITICAL, "Error return for RPC id %d, message follows:", id);
-            //bson_visit(data, elem_visitor);
+            //bson_visit("Error return for RPC", data);
             err = true;
         } else if (bson_get_int32(data, "fin", &id) == BSON_SUCCESS) {
             //WISHDEBUG(LOG_CRITICAL, "Fin message for RPC id %d", id);
             fin = true;
         } else {
-            WISHDEBUG(LOG_CRITICAL, "RPC error: no ack, sig or err, message follows:");
-            bson_visit(data, elem_visitor);
+            bson_visit("RPC error: no ack, sig or err, message follows:", data);
         }
     }
 
@@ -631,7 +625,7 @@ int wish_rpc_client_handle_res(wish_rpc_client_t *c, void *ctx, uint8_t *data, s
         
         if (rpc_entry->cb != NULL) {
             //WISHDEBUG(LOG_CRITICAL, "RPC callback (id %d ctx: %p, cb %p):", id, ctx, rpc_entry->cb);
-            //bson_visit(data, elem_visitor);
+            //bson_visit("RPC callback", data);
             rpc_entry->cb(rpc_entry, ctx, data, data_len);
         } else {
             WISHDEBUG(LOG_CRITICAL, "RPC callback is null! (id %d)", id);
@@ -755,7 +749,7 @@ int wish_rpc_server_handle(wish_rpc_server_t *s, wish_rpc_ctx *rpc_ctx, uint8_t 
     // Searching for RPC handler op rpc_ctx->op_str
     if (h == NULL) {
         WISHDEBUG(LOG_CRITICAL, "RPC server %s does not have handlers. Req id: %d.", s->server_name, rpc_ctx->id);
-        bson_visit(args, elem_visitor);
+        bson_visit("RPC server msg", args);
     } else {
         do {
             if (strncmp(h->op_str, rpc_ctx->op_str, MAX_RPC_OP_LEN) == 0) {
