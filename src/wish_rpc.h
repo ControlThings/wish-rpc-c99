@@ -30,7 +30,7 @@ typedef struct wish_rpc_context {
      *      the RPC
      *      -in mist device app, the local service which is the destination of an incoming Mist RPC command is saved here so that the RPC handler can use it for determining which mist device is  the recipient of the RPC 
      */
-    uint8_t *local_wsid;
+    uint8_t local_wsid[32];
     /* The originating wish context of the message, used in core rpc
      * server, send_op_handler(). */
     void *ctx;
@@ -38,14 +38,14 @@ typedef struct wish_rpc_context {
     void (*send)(void*, uint8_t* data, int len);
     void* send_context;
     void (*end)(struct wish_rpc_context *rpc_ctx); /* if non-null this callback is called when a request is terminated */
-} wish_rpc_ctx;
+} rpc_server_req;
 
 struct wish_rpc_entry;
 
 typedef void (*rpc_client_callback)(struct wish_rpc_entry* req, void *ctx, uint8_t *payload, size_t payload_len);
 
 struct wish_rpc_context_list_elem {
-    wish_rpc_ctx request_ctx;
+    rpc_server_req request_ctx;
     struct wish_rpc_context_list_elem *next;
 };
 
@@ -149,7 +149,7 @@ int wish_rpc_passthru_context(wish_rpc_client_t* client, bson* bs, rpc_client_ca
 
 int wish_rpc_passthru(wish_rpc_client_t* client, bson* bs, rpc_client_callback cb);
 
-int wish_rpc_passthru_req(wish_rpc_ctx* server_rpc_ctx, wish_rpc_client_t* client, bson* bs, rpc_client_callback cb);
+int wish_rpc_passthru_req(rpc_server_req* server_rpc_ctx, wish_rpc_client_t* client, bson* bs, rpc_client_callback cb);
 
 int wish_rpc_server_send(struct wish_rpc_context *ctx, const uint8_t *response, size_t response_len);
 
@@ -157,7 +157,7 @@ int wish_rpc_server_emit(struct wish_rpc_context *ctx, const uint8_t *response, 
 
 int wish_rpc_server_error(struct wish_rpc_context *ctx, int code, const uint8_t *msg);
 
-wish_rpc_ctx* wish_rpc_server_req_by_id(wish_rpc_server_t* s, int id);
+rpc_server_req* wish_rpc_server_req_by_id(wish_rpc_server_t* s, int id);
 
 void wish_rpc_server_emit_broadcast(wish_rpc_server_t* s, char* op, const uint8_t *response, size_t response_len);
 

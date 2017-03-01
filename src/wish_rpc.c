@@ -396,7 +396,7 @@ int wish_rpc_passthru_context(wish_rpc_client_t* client, bson* bs, rpc_client_ca
     return id;
 }
 
-int wish_rpc_passthru_req(wish_rpc_ctx* server_rpc_ctx, wish_rpc_client_t* client, bson* bs, rpc_client_callback cb) {
+int wish_rpc_passthru_req(rpc_server_req* server_rpc_ctx, wish_rpc_client_t* client, bson* bs, rpc_client_callback cb) {
     if(client->send == NULL) {
         WISHDEBUG(LOG_CRITICAL, "Passthru has no send function");
         return 0;
@@ -742,7 +742,7 @@ void wish_rpc_server_print(wish_rpc_server_t *s) {
  * @param args_array the request argument BSON array
  * @return 0 for success, 1 for fail
  */
-int wish_rpc_server_handle(wish_rpc_server_t *s, wish_rpc_ctx *rpc_ctx, uint8_t *args) {
+int wish_rpc_server_handle(wish_rpc_server_t *s, rpc_server_req *rpc_ctx, uint8_t *args) {
 
     int retval = 1;
     struct wish_rpc_server_handler *h = rpc_ctx->server->list_head;
@@ -778,7 +778,7 @@ int wish_rpc_server_handle(wish_rpc_server_t *s, wish_rpc_ctx *rpc_ctx, uint8_t 
     return retval;
 }
 
-wish_rpc_ctx* wish_rpc_server_req_by_id(wish_rpc_server_t *s, int id) {
+rpc_server_req* wish_rpc_server_req_by_id(wish_rpc_server_t *s, int id) {
     struct wish_rpc_context_list_elem* request;
     LL_FOREACH(s->request_list_head, request) {
 
@@ -792,7 +792,7 @@ wish_rpc_ctx* wish_rpc_server_req_by_id(wish_rpc_server_t *s, int id) {
 }
 
 void wish_rpc_server_end(wish_rpc_server_t *s, int id) {
-    wish_rpc_ctx *rpc_ctx = NULL;
+    rpc_server_req *rpc_ctx = NULL;
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
     struct wish_rpc_context_list_elem *request;
     LL_FOREACH(s->request_list_head, request) {
@@ -818,7 +818,7 @@ void wish_rpc_server_end(wish_rpc_server_t *s, int id) {
 }
 
 void wish_rpc_server_end_by_ctx(wish_rpc_server_t *s, void* ctx) {
-    wish_rpc_ctx *rpc_ctx = NULL;
+    rpc_server_req *rpc_ctx = NULL;
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
     struct wish_rpc_context_list_elem *request;
     LL_FOREACH(s->request_list_head, request) {
