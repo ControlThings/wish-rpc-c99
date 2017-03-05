@@ -205,17 +205,17 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t *c, char *op,
 }
 
 void wish_rpc_client_end_by_ctx(wish_rpc_client_t *c, void* ctx) {
-    WISHDEBUG(LOG_CRITICAL, "Should cleanup, what have we here? provided ctx is %p", ctx);
+    //WISHDEBUG(LOG_CRITICAL, "Should cleanup, what have we here? provided ctx is %p", ctx);
     struct wish_rpc_entry *entry = c->list_head;
     while (entry != NULL) {
         if (entry->cb_context == ctx) {
-            WISHDEBUG(LOG_CRITICAL, "  delete: %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
+            //WISHDEBUG(LOG_CRITICAL, "  delete: %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
             /* Save the pointer 'entry' to a tmp variable, because 'entry' might be deleted by 'delete_request_entry' */
             struct wish_rpc_entry *tmp = entry->next;
             delete_request_entry(c, entry->id); /* 'entry' pointer might be invalid after this! */
             entry = tmp;            /* Update loop variable */
         } else {
-            WISHDEBUG(LOG_CRITICAL, "  spare:  %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
+            //WISHDEBUG(LOG_CRITICAL, "  spare:  %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
             entry = entry->next;    /* Update loop variable */
         }
     }
