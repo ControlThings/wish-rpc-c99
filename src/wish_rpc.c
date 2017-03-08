@@ -433,7 +433,7 @@ void wish_rpc_passthru_end(wish_rpc_client_t* client, int id) {
 }
 
 
-void wish_rpc_server_delete_rpc_ctx(struct wish_rpc_context *rpc_ctx) {
+void wish_rpc_server_delete_rpc_ctx(rpc_server_req *rpc_ctx) {
     //WISHDEBUG(LOG_CRITICAL, "Searching for something to delete..");
     struct wish_rpc_context_list_elem *list_elem = NULL;
     struct wish_rpc_context_list_elem *tmp = NULL;
@@ -455,7 +455,7 @@ void wish_rpc_server_delete_rpc_ctx(struct wish_rpc_context *rpc_ctx) {
 
 
 /* { data: bson_element ack: req_id } */
-int wish_rpc_server_send(struct wish_rpc_context *ctx, const uint8_t *response, size_t response_len) {
+int wish_rpc_server_send(rpc_server_req *ctx, const uint8_t *response, size_t response_len) {
     
     int buffer_len = response_len + 512;
     char buffer[buffer_len];
@@ -477,8 +477,6 @@ int wish_rpc_server_send(struct wish_rpc_context *ctx, const uint8_t *response, 
         // FIXME check type under iterator is valid
         if (type == BSON_STRING) {
             bson_append_string(&bs, "data", bson_iterator_string(&it));
-        } else if (type == BSON_BINDATA) {
-            bson_append_binary(&bs, "data", bson_iterator_bin_data(&it), bson_iterator_bin_len(&it));
         } else if (type == BSON_BOOL) {
             bson_append_bool(&bs, "data", bson_iterator_bool(&it));
         } else if (type == BSON_INT) {
@@ -509,7 +507,7 @@ int wish_rpc_server_send(struct wish_rpc_context *ctx, const uint8_t *response, 
 }
 
 /* { data: bson_element ack: req_id } */
-int wish_rpc_server_emit(struct wish_rpc_context *ctx, const uint8_t *response, size_t response_len) {
+int wish_rpc_server_emit(rpc_server_req *ctx, const uint8_t *response, size_t response_len) {
     
     int buffer_len = response_len + 512;
     char buffer[buffer_len];
@@ -540,7 +538,8 @@ int wish_rpc_server_emit(struct wish_rpc_context *ctx, const uint8_t *response, 
 }
 
 /* { data: { code: errno, msg: errstr } err: req_id } */
-int wish_rpc_server_error(struct wish_rpc_context *ctx, int code, const uint8_t *msg) {
+int wish_rpc_server_error(rpc_server_req* ctx, int code, const uint8_t *msg) {
+    //WISHDEBUG(LOG_CRITICAL, "Generating rpc_error: %i %s", code, msg);
     if (strnlen(msg, WISH_RPC_ERR_MSG_MAX_LEN) == WISH_RPC_ERR_MSG_MAX_LEN) {
         WISHDEBUG(LOG_CRITICAL, "Error message too long in wish_rpc_server_error");
         return 1;
@@ -552,8 +551,10 @@ int wish_rpc_server_error(struct wish_rpc_context *ctx, int code, const uint8_t 
 
     bson bs;
     bson_init_buffer(&bs, buffer, buffer_len);
+    bson_append_start_object(&bs, "data");
     bson_append_int(&bs, "code", code);
     bson_append_string(&bs, "msg", msg);
+    bson_append_finish_object(&bs);
     bson_append_int(&bs, "err", ctx->id);
     bson_finish(&bs);
     if (bs.err) {
