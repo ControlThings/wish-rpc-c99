@@ -523,15 +523,37 @@ int wish_rpc_server_emit(rpc_server_req *ctx, const uint8_t *response, size_t re
         // expect bson document with data property
         bson_iterator it;
         bson_find_from_buffer(&it, response, "data");
-
-        bson_append_element(&bs, "data", &it);
+        
+        bson_type type = bson_iterator_type(&it);
+        
+        // FIXME check type under iterator is valid
+        if (type == BSON_STRING) {
+            bson_append_string(&bs, "data", bson_iterator_string(&it));
+        } else if (type == BSON_BOOL) {
+            bson_append_bool(&bs, "data", bson_iterator_bool(&it));
+        } else if (type == BSON_INT) {
+            bson_append_int(&bs, "data", bson_iterator_int(&it));
+        } else if (type == BSON_DOUBLE) {
+            bson_append_double(&bs, "data", bson_iterator_double(&it));
+        } else if (type == BSON_OBJECT) {
+            bson_append_element(&bs, "data", &it);
+        } else if (type == BSON_BINDATA) {
+            bson_append_element(&bs, "data", &it);
+        } else if (type == BSON_ARRAY) {
+            bson_append_element(&bs, "data", &it);
+        } else {
+            WISHDEBUG(LOG_CRITICAL, "Unsupported bson type %i in wish_rpc_server_send", type);
+        }
+        
         bson_append_int(&bs, "sig", ctx->id);
         bson_finish(&bs);
     }
     if (bs.err) {
-        WISHDEBUG(LOG_CRITICAL, "BSON error in wish_rpc_server_emit");
+        WISHDEBUG(LOG_CRITICAL, "BSON error in wish_rpc_server_emit %i %s buf %i res %i", bs.err, bs.errstr, buffer_len, response_len);
         return 1;
     }
+    
+    WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_emit: res_len %i, bson_size: %i", response_len, bson_size(&bs));
     
     ctx->send(ctx->send_context, (char*)bson_data(&bs), bson_size(&bs));
     return 0;
