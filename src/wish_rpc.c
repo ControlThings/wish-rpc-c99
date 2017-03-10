@@ -483,9 +483,9 @@ int wish_rpc_server_send(rpc_server_req *ctx, const uint8_t *response, size_t re
             bson_append_int(&bs, "data", bson_iterator_int(&it));
         } else if (type == BSON_DOUBLE) {
             bson_append_double(&bs, "data", bson_iterator_double(&it));
-        } else if (type == BSON_OBJECT) {
-            bson_append_element(&bs, "data", &it);
         } else if (type == BSON_BINDATA) {
+            bson_append_binary(&bs, "data", bson_iterator_bin_data(&it), bson_iterator_bin_len(&it));
+        } else if (type == BSON_OBJECT) {
             bson_append_element(&bs, "data", &it);
         } else if (type == BSON_ARRAY) {
             bson_append_element(&bs, "data", &it);
@@ -507,7 +507,7 @@ int wish_rpc_server_send(rpc_server_req *ctx, const uint8_t *response, size_t re
 }
 
 /* { data: bson_element ack: req_id } */
-int wish_rpc_server_emit(rpc_server_req *ctx, const uint8_t *response, size_t response_len) {
+int wish_rpc_server_emit(rpc_server_req *req, const uint8_t *response, size_t response_len) {
     
     int buffer_len = response_len + 512;
     char buffer[buffer_len];
@@ -517,7 +517,7 @@ int wish_rpc_server_emit(rpc_server_req *ctx, const uint8_t *response, size_t re
 
     if(response == NULL) {
         // send ack without any data
-        bson_append_int(&bs, "sig", ctx->id);
+        bson_append_int(&bs, "sig", req->id);
         bson_finish(&bs);
     } else {
         // expect bson document with data property
@@ -535,9 +535,9 @@ int wish_rpc_server_emit(rpc_server_req *ctx, const uint8_t *response, size_t re
             bson_append_int(&bs, "data", bson_iterator_int(&it));
         } else if (type == BSON_DOUBLE) {
             bson_append_double(&bs, "data", bson_iterator_double(&it));
-        } else if (type == BSON_OBJECT) {
-            bson_append_element(&bs, "data", &it);
         } else if (type == BSON_BINDATA) {
+            bson_append_binary(&bs, "data", bson_iterator_bin_data(&it), bson_iterator_bin_len(&it));
+        } else if (type == BSON_OBJECT) {
             bson_append_element(&bs, "data", &it);
         } else if (type == BSON_ARRAY) {
             bson_append_element(&bs, "data", &it);
@@ -545,7 +545,7 @@ int wish_rpc_server_emit(rpc_server_req *ctx, const uint8_t *response, size_t re
             WISHDEBUG(LOG_CRITICAL, "Unsupported bson type %i in wish_rpc_server_send", type);
         }
         
-        bson_append_int(&bs, "sig", ctx->id);
+        bson_append_int(&bs, "sig", req->id);
         bson_finish(&bs);
     }
     if (bs.err) {
@@ -553,9 +553,9 @@ int wish_rpc_server_emit(rpc_server_req *ctx, const uint8_t *response, size_t re
         return 1;
     }
     
-    WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_emit: res_len %i, bson_size: %i", response_len, bson_size(&bs));
+    //WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_emit: res_len %i, bson_size: %i", response_len, bson_size(&bs));
     
-    ctx->send(ctx->send_context, (char*)bson_data(&bs), bson_size(&bs));
+    req->send(req->send_context, (char*)bson_data(&bs), bson_size(&bs));
     return 0;
 }
 
@@ -579,6 +579,7 @@ int wish_rpc_server_error(rpc_server_req* ctx, int code, const uint8_t *msg) {
     bson_append_finish_object(&bs);
     bson_append_int(&bs, "err", ctx->id);
     bson_finish(&bs);
+    
     if (bs.err) {
         WISHDEBUG(LOG_CRITICAL, "BSON error in wish_rpc_server_error");
         return 1;
