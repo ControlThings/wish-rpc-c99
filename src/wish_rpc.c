@@ -868,3 +868,24 @@ void wish_rpc_server_end_by_ctx(wish_rpc_server_t *s, void* ctx) {
 }
 
 
+void wish_rpc_server_end_by_context(wish_rpc_server_t *s, void* context) {
+    /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
+    struct wish_rpc_context_list_elem *request;
+    struct wish_rpc_context_list_elem *tmp;
+    
+    LL_FOREACH_SAFE(s->request_list_head, request, tmp) {
+
+        if (request->request_ctx.context == context) {
+            rpc_server_req *rpc_ctx = &request->request_ctx;
+            
+            /* Call the end handler if it is set */
+            if(rpc_ctx->end != NULL) { rpc_ctx->end(rpc_ctx); }
+
+            /* Delete the request context */
+            wish_rpc_server_delete_rpc_ctx(rpc_ctx);
+            break;
+        }
+    }
+}
+
+

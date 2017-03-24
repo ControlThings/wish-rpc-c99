@@ -131,6 +131,8 @@ void wish_rpc_server_end(wish_rpc_server_t *s, int end);
 
 void wish_rpc_server_end_by_ctx(wish_rpc_server_t *s, void* ctx);
 
+void wish_rpc_server_end_by_context(wish_rpc_server_t *s, void* context);
+
 rpc_client_req* find_request_entry(wish_rpc_client_t *c, wish_rpc_id_t id);
 
 rpc_client_req* find_passthrough_request_entry(wish_rpc_client_t *c, wish_rpc_id_t id);
