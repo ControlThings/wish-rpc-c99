@@ -94,6 +94,8 @@ typedef struct wish_rpc_client_t {
 struct wish_rpc_server_handler {
     /* the operation that this handler handles */
     char op_str[MAX_RPC_OP_LEN];
+    char* doc;
+    char* args;
     rpc_op_handler handler;
     struct wish_rpc_server_handler *next;
 };
