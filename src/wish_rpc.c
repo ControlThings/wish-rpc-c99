@@ -6,7 +6,6 @@
 #include "wish_rpc.h"
 #include "wish_platform.h"
 #include "wish_debug.h"
-#include "cbson.h"
 #include "bson.h"
 #include "bson_visitor.h"
 #include "utlist.h"
@@ -126,58 +125,27 @@ static void delete_request_entry(wish_rpc_client_t *c, wish_rpc_id_t id) {
     }
 }
 
-
-wish_rpc_id_t wish_rpc_client(wish_rpc_client_t *c, char *op_str, 
-        uint8_t *args_array, size_t args_len, rpc_client_callback cb,
-        uint8_t *buffer, size_t buffer_len) {
-
-    uint8_t *rpc_msg = buffer;
-    size_t rpc_msg_max_len = buffer_len;
-    bson_init_doc(rpc_msg, rpc_msg_max_len);
-
-    bson_write_string(rpc_msg, rpc_msg_max_len, "op", op_str);
-    if (args_array != NULL && args_len > 0) {
-        /* args array is user-supplied */
-        if (bson_write_embedded_doc_or_array(rpc_msg, rpc_msg_max_len, 
-                "args", args_array, BSON_KEY_ARRAY) == BSON_FAIL) {
-            bson_visit("Could not write args to RPC message", args_array);
-        }
-    }
-    else {
-        /* Create an empty args array, user did not specify args */
-        const size_t empty_args_array_len = 10;
-        uint8_t empty_args_array[empty_args_array_len];
-        bson_init_doc(empty_args_array, empty_args_array_len);
-        bson_write_embedded_doc_or_array(rpc_msg, rpc_msg_max_len, 
-            "args", empty_args_array, BSON_KEY_ARRAY);
-    }
-
-    wish_rpc_id_t id = 0;
-    
-    if (cb != NULL) {
-        id = create_request_entry(c, cb);
-        bson_write_int32(rpc_msg, rpc_msg_max_len, "id", id);
-    }
-    return id;
-}
-
-
-wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t *c, char *op, 
-        uint8_t *args_array, size_t args_len, rpc_client_callback cb,
-        uint8_t *buffer, size_t buffer_len) {
+wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, char* op, 
+        uint8_t* args_array, size_t args_len, rpc_client_callback cb,
+        uint8_t* buffer, size_t buffer_len) {
     
     bson bs;
     bson_init_buffer(&bs, buffer, buffer_len);
     bson_append_string(&bs, "op", op);
     
-    bson_iterator it;
-    bson_find_from_buffer(&it, args_array, "args");
-    if(bson_iterator_type(&it) != BSON_ARRAY) {
-        // args property must be array
-        WISHDEBUG(LOG_CRITICAL, "Dumping request! Args property must be array!");
-        return 0;
+    if (args_len == 0 || args_array == NULL) {
+        bson_append_start_array(&bs, "args");
+        bson_append_finish_array(&bs);
+    } else {
+        bson_iterator it;
+        bson_find_from_buffer(&it, args_array, "args");
+        if(bson_iterator_type(&it) != BSON_ARRAY) {
+            // args property must be array
+            WISHDEBUG(LOG_CRITICAL, "Dumping request! Args property must be array!");
+            return 0;
+        }
+        bson_append_element(&bs, "args", &it);
     }
-    bson_append_element(&bs, "args", &it);
     
     wish_rpc_id_t id = 0;
     
@@ -268,7 +236,7 @@ void wish_rpc_client_set_cb_context(wish_rpc_client_t *c, int id, void* ctx) {
     
 }
 
-static void wish_rpc_passthru_cb(rpc_client_req* req, void *ctx, uint8_t *payload, size_t payload_len) {
+static void wish_rpc_passthru_cb(rpc_client_req* req, void* ctx, const uint8_t* payload, size_t payload_len) {
     bool end = false;
     
     if (req == NULL) {
@@ -316,7 +284,7 @@ static void wish_rpc_passthru_cb(rpc_client_req* req, void *ctx, uint8_t *payloa
 /*
  * Called when passthrough client receives a response
  */
-static void wish_rpc_passthru_req_cb(rpc_client_req* req, void *ctx, uint8_t *payload, size_t payload_len) {
+static void wish_rpc_passthru_req_cb(rpc_client_req* req, void* ctx, const uint8_t* payload, size_t payload_len) {
     bool end = false;
     
     if (req == NULL) {
@@ -608,27 +576,36 @@ void wish_rpc_server_emit_broadcast(wish_rpc_server_t* s, char* op, const uint8_
 /**
  * @return 1, if RPC entry was not found , else 0
  */
-int wish_rpc_client_handle_res(wish_rpc_client_t *c, void *ctx, uint8_t *data, size_t data_len) {
+int wish_rpc_client_handle_res(wish_rpc_client_t* c, void* ctx, const uint8_t* data, size_t data_len) {
     
     bool sig = false;
     bool fin = false;
     bool err = false;
     int retval = 0;
     wish_rpc_id_t id = -1;
-    if (bson_get_int32(data, "ack", &id) == BSON_FAIL) {
-        if (bson_get_int32(data, "sig", &id) == BSON_SUCCESS) {
+    
+    bson_iterator it;
+    
+    if (bson_find_from_buffer(&it, data, "ack") != BSON_INT) {
+        id = bson_iterator_int(&it);
+        
+        if (bson_find_from_buffer(&it, data, "sig") == BSON_INT) {
+            id = bson_iterator_int(&it);
             //WISHDEBUG(LOG_DEBUG, "Sig id %i", id);
             /* Do not remove the callback if we get "sig" instead of
              * ack" */
             sig = true;
-        } else if (bson_get_int32(data, "err", &id) == BSON_SUCCESS) {
+        } else if (bson_find_from_buffer(&it, data, "err") == BSON_INT) {
+            id = bson_iterator_int(&it);
             //bson_visit("Error return for RPC", data);
             err = true;
-        } else if (bson_get_int32(data, "fin", &id) == BSON_SUCCESS) {
+        } else if (bson_find_from_buffer(&it, data, "fin") == BSON_INT) {
+            id = bson_iterator_int(&it);
             //WISHDEBUG(LOG_CRITICAL, "Fin message for RPC id %d", id);
             fin = true;
         } else {
             bson_visit("RPC error: no ack, sig or err, message follows:", data);
+            return retval;
         }
     }
 
@@ -766,7 +743,7 @@ void wish_rpc_server_print(wish_rpc_server_t *s) {
  * @param args_array the request argument BSON array
  * @return 0 for success, 1 for fail
  */
-int wish_rpc_server_handle(wish_rpc_server_t *s, rpc_server_req *rpc_ctx, uint8_t *args) {
+int wish_rpc_server_handle(wish_rpc_server_t *s, rpc_server_req *rpc_ctx, const uint8_t *args) {
 
     int retval = 1;
     struct wish_rpc_server_handler *h = rpc_ctx->server->list_head;

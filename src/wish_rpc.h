@@ -42,14 +42,14 @@ typedef struct wish_rpc_context {
 
 struct wish_rpc_entry;
 
-typedef void (*rpc_client_callback)(struct wish_rpc_entry* req, void *ctx, uint8_t *payload, size_t payload_len);
+typedef void (*rpc_client_callback)(struct wish_rpc_entry* req, void *ctx, const uint8_t *payload, size_t payload_len);
 
 struct wish_rpc_context_list_elem {
     rpc_server_req request_ctx;
     struct wish_rpc_context_list_elem *next;
 };
 
-typedef void (*rpc_op_handler)(struct wish_rpc_context *rpc_ctx, uint8_t *args_array);
+typedef void (*rpc_op_handler)(struct wish_rpc_context *rpc_ctx, const uint8_t *args_array);
 
 struct wish_rpc_client_t;
 
@@ -127,7 +127,7 @@ void wish_rpc_server_register(wish_rpc_server_t *s, struct wish_rpc_server_handl
 /* Handle an RPC request to an RPC server
  * Returns 0, if the request was valid, and 1 if there was no handler to
  * this "op" */
-int wish_rpc_server_handle(wish_rpc_server_t *s, struct wish_rpc_context *wish_rcp_ctx, uint8_t *args_array);
+int wish_rpc_server_handle(wish_rpc_server_t *s, struct wish_rpc_context *wish_rcp_ctx, const uint8_t *args_array);
 
 void wish_rpc_server_end(wish_rpc_server_t *s, int end);
 
@@ -167,7 +167,7 @@ void wish_rpc_server_emit_broadcast(wish_rpc_server_t* s, char* op, const uint8_
 
 void wish_rpc_server_delete_rpc_ctx(struct wish_rpc_context *rpc_ctx);
 
-int wish_rpc_client_handle_res(wish_rpc_client_t *c, void *ctx, uint8_t *data, size_t len);
+int wish_rpc_client_handle_res(wish_rpc_client_t *c, void *ctx, const uint8_t *data, size_t len);
 
 struct wish_rpc_context_list_elem *wish_rpc_server_get_free_rpc_ctx_elem(wish_rpc_server_t *s);
 
