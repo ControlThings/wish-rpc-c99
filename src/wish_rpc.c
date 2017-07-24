@@ -7,7 +7,7 @@
 #include "wish_platform.h"
 #include "wish_debug.h"
 #include "bson.h"
-#include "bson_visitor.h"
+#include "bson_visit.h"
 #include "utlist.h"
 
 static wish_rpc_id_t create_request_entry(wish_rpc_client_t *c, rpc_client_callback cb) {
