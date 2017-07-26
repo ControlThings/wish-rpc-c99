@@ -10,6 +10,39 @@
 #include "bson_visit.h"
 #include "utlist.h"
 
+wish_rpc_server_t* wish_rpc_server_init(void* context, rpc_server_send_cb cb) {
+    return wish_rpc_server_init_size(context, cb, 10);
+}
+
+wish_rpc_server_t* wish_rpc_server_init_size(void* context, rpc_server_send_cb cb, int size) {
+    wish_rpc_server_t* server = wish_platform_malloc(sizeof(wish_rpc_server_t));
+    
+    if (server == NULL) { return NULL; }
+    
+    memset(server, 0, sizeof(wish_rpc_server_t));
+    
+    server->request_list_head = NULL;
+    server->rpc_ctx_pool = wish_platform_malloc(sizeof(struct wish_rpc_context_list_elem)*size);
+    memset(server->rpc_ctx_pool, 0, sizeof(struct wish_rpc_context_list_elem)*size);
+    server->rpc_ctx_pool_num_slots = size;
+    
+    server->send = cb;
+    server->context = context;
+    
+    return server;
+}
+
+void wish_rpc_server_set_name(wish_rpc_server_t* server, const char* name) {
+    strncpy(server->name, name, MAX_RPC_SERVER_NAME_LEN);
+}
+
+/**
+ * Instantiate new request for client
+ * 
+ * @param c
+ * @param cb
+ * @return 
+ */
 static wish_rpc_id_t create_request_entry(wish_rpc_client_t *c, rpc_client_callback cb) {
     struct wish_rpc_entry *new_entry = wish_platform_malloc(sizeof (struct wish_rpc_entry));
 
@@ -421,6 +454,86 @@ void wish_rpc_server_delete_rpc_ctx(rpc_server_req *rpc_ctx) {
     }
 }
 
+void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context, const bson* msg) {
+    // TODO: refactor to use the bson directly, not like this.
+    const char* data = bson_data(msg);
+        
+    int end = 0;
+    
+    bson_iterator it;
+    bson_iterator_from_buffer(&it, data);
+    
+    if (bson_find_fieldpath_value("op", &it) != BSON_STRING) {
+        bson_iterator_from_buffer(&it, data);
+        if ( bson_find_fieldpath_value("end", &it) != BSON_INT ) {
+            bson_visit("There was no 'op' or 'end':", data);
+            return;
+        } else {
+            wish_rpc_server_end(server, end);
+            return;
+        }
+    }
+    
+    const char* op = bson_iterator_string(&it);
+    
+    //WISHDEBUG(LOG_CRITICAL, "op %s from app %s", op, app->service_name);
+
+    bson_iterator_from_buffer(&it, data);
+
+    const uint8_t* args = NULL;
+    
+    if (bson_find_fieldpath_value("args", &it) != BSON_ARRAY) {
+        int empty_args_len = 32;
+        uint8_t empty_args[empty_args_len];
+        bson bs;
+        bson_init_buffer(&bs, empty_args, empty_args_len);
+        bson_append_start_array(&bs, "args");
+        bson_append_finish_array(&bs);
+    } else {
+        args = bson_iterator_value(&it);
+    }
+
+    bson_iterator_from_buffer(&it, data);
+
+    int32_t id = 0;
+    
+    if (bson_find_fieldpath_value("id", &it) == BSON_INT) {
+        id = bson_iterator_int(&it);
+    }
+
+    struct wish_rpc_context_list_elem *list_elem = wish_rpc_server_get_free_rpc_ctx_elem(server);
+    
+    if (list_elem == NULL) {
+        WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_receive: out of memory (%s)", server->name);
+        
+        rpc_server_req err_req;
+        err_req.server = server;
+        //err_req.send = wish_core_app_rpc_send; // This was moved to server->send
+        err_req.send_context = &err_req;
+        err_req.id = id;
+        err_req.ctx = ctx;
+        err_req.context = context;
+        //memcpy(err_req.local_wsid, src_wsid, WISH_WSID_LEN);
+        
+        wish_rpc_server_error(&err_req, 63, "Core requests full for apps.");
+        return;
+    } else {
+        rpc_server_req* req = &(list_elem->request_ctx);
+        req->server = server;
+        //req->send = wish_core_app_rpc_send; // This was moved to server->send
+        req->send_context = req;
+        memcpy(req->op_str, op, MAX_RPC_OP_LEN);
+        req->id = id;
+        req->ctx = ctx;
+        req->context = context;
+        //memcpy(req->local_wsid, src_wsid, WISH_WSID_LEN);
+    
+        if (wish_rpc_server_handle(server, req, args)) {
+            WISHDEBUG(LOG_DEBUG, "RPC server fail: wish_core_app_rpc_func");
+        }
+    }
+
+}
 
 /* { data: bson_element ack: req_id } */
 int wish_rpc_server_send(rpc_server_req *ctx, const uint8_t *response, size_t response_len) {
@@ -469,7 +582,7 @@ int wish_rpc_server_send(rpc_server_req *ctx, const uint8_t *response, size_t re
         return 1;
     }
     
-    ctx->send(ctx->send_context, (char*)bson_data(&bs), bson_size(&bs));
+    ctx->server->send(ctx->send_context, &bs);
     wish_rpc_server_delete_rpc_ctx(ctx);
     return 0;
 }
@@ -523,7 +636,7 @@ int wish_rpc_server_emit(rpc_server_req *req, const uint8_t *response, size_t re
     
     //WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_emit: res_len %i, bson_size: %i", response_len, bson_size(&bs));
     
-    req->send(req->send_context, (char*)bson_data(&bs), bson_size(&bs));
+    req->server->send(req->send_context, &bs);
     return 0;
 }
 
@@ -553,7 +666,7 @@ int wish_rpc_server_error(rpc_server_req* ctx, int code, const uint8_t *msg) {
         return 1;
     }
     
-    ctx->send(ctx->send_context, (char*)bson_data(&bs), bson_size(&bs));
+    ctx->server->send(ctx->send_context, &bs);
     wish_rpc_server_delete_rpc_ctx(ctx);
     return 0;
 }
@@ -659,7 +772,7 @@ void wish_rpc_server_add_handler(wish_rpc_server_t *s,
     struct wish_rpc_server_handler *h = s->list_head;
 
     if (h == NULL) {
-        WISHDEBUG(LOG_DEBUG, "The RPC server %s does not have any handlers, adding first entry", s->server_name);
+        WISHDEBUG(LOG_DEBUG, "The RPC server %s does not have any handlers, adding first entry", s->name);
         s->list_head = new_h;
     }
     else {
@@ -676,7 +789,7 @@ void wish_rpc_server_register(wish_rpc_server_t *s, struct wish_rpc_server_handl
     struct wish_rpc_server_handler *h = s->list_head;
 
     if (h == NULL) {
-        WISHDEBUG(LOG_DEBUG, "The RPC server %s does not have any handlers, adding first entry", s->server_name);
+        WISHDEBUG(LOG_DEBUG, "The RPC server %s does not have any handlers, adding first entry", s->name);
         s->list_head = handler;
     } else {
         while (h->next != NULL) {
@@ -690,7 +803,7 @@ struct wish_rpc_context_list_elem *wish_rpc_server_get_free_rpc_ctx_elem(wish_rp
     struct wish_rpc_context_list_elem *free_elem = NULL;
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
     if (s == NULL || s->rpc_ctx_pool_num_slots == 0 || s->rpc_ctx_pool == NULL) {
-        WISHDEBUG(LOG_CRITICAL, "RPC server %s: Cannot save RPC request context!", s->server_name);
+        WISHDEBUG(LOG_CRITICAL, "RPC server %s: Cannot save RPC request context!", s->name);
     } else {
         int i = 0;
         for (i = 0; i < s->rpc_ctx_pool_num_slots; i++) {
@@ -721,7 +834,7 @@ struct wish_rpc_context_list_elem *wish_rpc_server_get_free_rpc_ctx_elem(wish_rp
 }
 
 void wish_rpc_server_print(wish_rpc_server_t *s) {
-    WISHDEBUG(LOG_CRITICAL, "RPC server %s:", s->server_name);
+    WISHDEBUG(LOG_CRITICAL, "RPC server %s:", s->name);
     // Count the active number of requests
     int i;
     int c = 0;
@@ -749,7 +862,7 @@ int wish_rpc_server_handle(wish_rpc_server_t *s, rpc_server_req *rpc_ctx, const 
     struct wish_rpc_server_handler *h = rpc_ctx->server->list_head;
     // Searching for RPC handler op rpc_ctx->op_str
     if (h == NULL) {
-        WISHDEBUG(LOG_CRITICAL, "RPC server %s does not have handlers. Req id: %d.", s->server_name, rpc_ctx->id);
+        WISHDEBUG(LOG_CRITICAL, "RPC server %s does not have handlers. Req id: %d.", s->name, rpc_ctx->id);
         bson_visit("RPC server msg", args);
     } else {
         do {
@@ -770,7 +883,7 @@ int wish_rpc_server_handle(wish_rpc_server_t *s, rpc_server_req *rpc_ctx, const 
         } while (h != NULL);
         
         if(retval) {
-            WISHDEBUG(LOG_CRITICAL, "RPC server %s does not contain op: %s.", s->server_name, rpc_ctx->op_str);
+            WISHDEBUG(LOG_CRITICAL, "RPC server %s does not contain op: %s.", s->name, rpc_ctx->op_str);
             wish_rpc_server_error(rpc_ctx, 8, "Command not found or permission denied.");
             /* Not an existing handler. Delete the request context immediately. */
             wish_rpc_server_delete_rpc_ctx(rpc_ctx);
@@ -814,7 +927,7 @@ void wish_rpc_server_end(wish_rpc_server_t *s, int id) {
         
         //WISHDEBUG(LOG_CRITICAL, "RPC server %s cleaned up request with id: %i.", s->server_name, id);
     } else {
-        WISHDEBUG(LOG_DEBUG, "RPC server %s has no request with id: %i.", s->server_name, id);
+        WISHDEBUG(LOG_DEBUG, "RPC server %s has no request with id: %i.", s->name, id);
     }
 }
 
@@ -840,7 +953,7 @@ void wish_rpc_server_end_by_ctx(wish_rpc_server_t *s, void* ctx) {
         
         //WISHDEBUG(LOG_CRITICAL, "RPC server %s cleaned up request with id: %i and ctx pointer: %p.", s->server_name, rpc_ctx->id, ctx);
     } else {
-        WISHDEBUG(LOG_DEBUG, "RPC server %s has no request with ctx: %p.", s->server_name, ctx);
+        WISHDEBUG(LOG_DEBUG, "RPC server %s has no request with ctx: %p.", s->name, ctx);
     }
 }
 

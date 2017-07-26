@@ -8,36 +8,54 @@ extern "C" {
 #include <stddef.h>
 #include "bson.h"
 
-/* A generic RPC client and server implementation */
+/** 
+ * A generic RPC client and server implementation 
+ */
 
 typedef int32_t wish_rpc_id_t;
 
 struct wish_rpc_server;
+struct wish_rpc_context;
 
 #define MAX_RPC_OP_LEN 32
 #define MAX_RPC_SERVER_NAME_LEN 16
 /* This defines the maximum length of an RPC error message */
 #define WISH_RPC_ERR_MSG_MAX_LEN 256
 
-// request context for wish_rpc_server
+typedef void (*rpc_server_send_cb)(struct wish_rpc_context* req, const bson* bs);
+
+/**
+ * Request context for wish_rpc_server
+ */
 typedef struct wish_rpc_context {
+    /** Pointer to RPC Server */
     struct wish_rpc_server* server;
+    /** 
+     * Operator 
+     * 
+     * The operator string is used to select the handler registered in the server
+     */
     char op_str[MAX_RPC_OP_LEN];
-    /* Request ID */
+    /** Request ID */
     int id;
-    /** This field is for saving local service id, used in following situatons:
+    /** 
+     * This field is for saving local service id, used in following situations:
      *      -when handling a "core app" rpc to determine which service called 
      *      the RPC
      *      -in mist device app, the local service which is the destination of an incoming Mist RPC command is saved here so that the RPC handler can use it for determining which mist device is  the recipient of the RPC 
      */
     uint8_t local_wsid[32];
-    /* The originating wish context of the message, used in core rpc
-     * server, send_op_handler(). */
+    /** 
+     * The originating wish context of the message, used in core rpc
+     * server, send_op_handler(). 
+     */
     void *ctx;
-    void *context; /* Pointer to the wanted context structure  */
-    void (*send)(void*, uint8_t* data, int len);
+    /** Pointer to the wanted context structure  */
+    void *context; 
+    /** Send function context passed as the first argument to the send function */
     void* send_context;
-    void (*end)(struct wish_rpc_context *rpc_ctx); /* if non-null this callback is called when a request is terminated */
+    /** If non-null this callback is called when a request is terminated */
+    void (*end)(struct wish_rpc_context *rpc_ctx);
 } rpc_server_req;
 
 struct wish_rpc_entry;
@@ -60,8 +78,10 @@ typedef struct wish_rpc_entry {
     void* cb_context;
     rpc_client_callback passthru_cb;
     int passthru_id;
-    void* passthru_ctx; // used for storing peer pointer in passthrough. This field should probably should be removed when introducing separate rpc_clients for each peer
-    void* passthru_ctx2; // used for storing Mist pointer in nodejs addon
+    /** used for storing peer pointer in passthrough. This field should probably should be removed when introducing separate rpc_clients for each peer */
+    void* passthru_ctx;
+    /** used for storing Mist pointer in nodejs addon */
+    void* passthru_ctx2; 
     struct wish_rpc_entry *next;
     bool err;
 } rpc_client_req;
@@ -69,30 +89,33 @@ typedef struct wish_rpc_entry {
 typedef struct wish_rpc_request {
     wish_rpc_id_t id;
     
-    // context used for sending replies, is a: 
-    //   - peer            in wish_app_protocol_rpc
-    //   - remote host     in wish-core intercore RPC
-    //   - wsid            in wish-core service RPC
+    /**
+     *  context used for sending replies, is a: 
+     *   - peer            in wish_app_protocol_rpc
+     *   - remote host     in wish-core intercore RPC
+     *   - wsid            in wish-core service RPC
+     */
     void* response_context;
     
-    struct wish_rpc_entry *next;
+    struct wish_rpc_entry* next;
 } wish_rpc_req;
 
 typedef struct wish_rpc_client_t {
-    // context used to store wish_core_t in wish implementation
+    /** context used to store wish_core_t in wish implementation */
     void* context;
-    wish_rpc_id_t next_id;  // This is the ID that will be used in next req
-    struct wish_rpc_entry *list_head;
+    /** This is the ID that will be used in next req */
+    wish_rpc_id_t next_id;
+    /** Pointer to first request */
+    struct wish_rpc_entry* list_head;
+    /** Send function for client */
     void (*send)(void* ctx, uint8_t* buffer, int buffer_len);
+    /** Send function context */
     void* send_ctx;
 } wish_rpc_client_t;
 
-
-
-
-/* This struct encapsulates a Wish RPC server op handler */
+/** This struct encapsulates a Wish RPC server op handler */
 struct wish_rpc_server_handler {
-    /* the operation that this handler handles */
+    /** the operation that this handler handles */
     char op_str[MAX_RPC_OP_LEN];
     char* doc;
     char* args;
@@ -105,28 +128,37 @@ struct wish_rpc_server_handler {
 #define WISH_RPC_SERVER_STATIC_REQUEST_POOL
 
 typedef struct wish_rpc_server {
-    char server_name[MAX_RPC_SERVER_NAME_LEN];
+    char name[MAX_RPC_SERVER_NAME_LEN];
     struct wish_rpc_server_handler *list_head;
-    void * context;
-    /* A list representing the requests that have arrived to the RPC server. Used in for example to emit 'sig' responses */
+    /** Server context */
+    void* context;
+    /** Send function for sending data back to the client */
+    rpc_server_send_cb send;    
+    /** A list representing the requests that have arrived to the RPC server. Used in for example to emit 'sig' responses */
     struct wish_rpc_context_list_elem *request_list_head;
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
-    /* RPC contexts of incoming requests are stored to this pool */
+    /** RPC contexts of incoming requests are stored to this pool */
     struct wish_rpc_context_list_elem *rpc_ctx_pool;
-    /* The number of slots in the rpc_ctx_pool */
+    /** The number of slots in the rpc_ctx_pool */
     int rpc_ctx_pool_num_slots;
 #endif
 } wish_rpc_server_t;
 
+wish_rpc_server_t* wish_rpc_server_init(void* context, rpc_server_send_cb cb);
+
+wish_rpc_server_t* wish_rpc_server_init_size(void* context, rpc_server_send_cb cb, int size);
+
+void wish_rpc_server_set_name(wish_rpc_server_t* server, const char* name);
+
 /** Server: Add a RPC handler */
-void wish_rpc_server_add_handler(wish_rpc_server_t *s, 
-        char *op_str, rpc_op_handler handler_fn);
+void wish_rpc_server_add_handler(wish_rpc_server_t *s, char *op_str, rpc_op_handler handler_fn);
 
 void wish_rpc_server_register(wish_rpc_server_t *s, struct wish_rpc_server_handler* handler);
 
-/* Handle an RPC request to an RPC server
- * Returns 0, if the request was valid, and 1 if there was no handler to
- * this "op" */
+/** 
+ * Handle an RPC request to an RPC server
+ * 
+ * Returns 0, if the request was valid, and 1 if there was no handler to this "op" */
 int wish_rpc_server_handle(wish_rpc_server_t *s, struct wish_rpc_context *wish_rcp_ctx, const uint8_t *args_array);
 
 void wish_rpc_server_end(wish_rpc_server_t *s, int end);
@@ -154,6 +186,8 @@ int wish_rpc_passthru_context(wish_rpc_client_t* client, bson* bs, rpc_client_ca
 int wish_rpc_passthru(wish_rpc_client_t* client, bson* bs, rpc_client_callback cb);
 
 int wish_rpc_passthru_req(rpc_server_req* server_rpc_ctx, wish_rpc_client_t* client, bson* bs, rpc_client_callback cb);
+
+void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context, const bson* msg);
 
 int wish_rpc_server_send(struct wish_rpc_context *ctx, const uint8_t *response, size_t response_len);
 
