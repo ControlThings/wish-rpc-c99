@@ -49,30 +49,30 @@ static wish_rpc_id_t create_request_entry(wish_rpc_client_t *c, rpc_client_callb
     if (new_entry == NULL) {
         WISHDEBUG(LOG_CRITICAL, "malloc fail");
         return 0;
+    } 
+
+    memset(new_entry, 0, sizeof (struct wish_rpc_entry));
+
+    new_entry->client = c;
+
+    // ensure rpc will not send a request with reqest id 0.
+    if (c->next_id == 0) { c->next_id++; }
+
+    new_entry->id = c->next_id++;
+    new_entry->cb = cb;
+    if (c->list_head == NULL) {
+        /* list empty. Put new node as first on the list */
+        c->list_head = new_entry;
     } else {
-        memset(new_entry, 0, sizeof (struct wish_rpc_entry));
-        
-        new_entry->client = c;
-        
-        // ensure rpc will not send a request with reqest id 0.
-        if (c->next_id == 0) { c->next_id++; }
-        
-        new_entry->id = c->next_id++;
-        new_entry->cb = cb;
-        if (c->list_head == NULL) {
-            /* list empty. Put new node as first on the list */
-            c->list_head = new_entry;
-        } else {
-            struct wish_rpc_entry *entry = c->list_head;
-            while (entry->next != NULL) {
-                entry = entry->next;
-            }
-            /* node now points to the last item on the list */
-            /* Save new request at end of list */
-            entry->next = new_entry;
+        struct wish_rpc_entry *entry = c->list_head;
+        while (entry->next != NULL) {
+            entry = entry->next;
         }
-        return new_entry->id;
+        /* node now points to the last item on the list */
+        /* Save new request at end of list */
+        entry->next = new_entry;
     }
+    return new_entry->id;
 }
 
 rpc_client_req* find_request_entry(wish_rpc_client_t *c, wish_rpc_id_t id) {
