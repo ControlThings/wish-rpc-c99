@@ -158,8 +158,8 @@ static void delete_request_entry(wish_rpc_client_t *c, wish_rpc_id_t id) {
     }
 }
 
-wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, char* op, 
-        uint8_t* args_array, size_t args_len, rpc_client_callback cb,
+wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, const char* op, 
+        const uint8_t* args_array, size_t args_len, rpc_client_callback cb,
         uint8_t* buffer, size_t buffer_len) {
     
     bson bs;
@@ -360,7 +360,7 @@ int wish_rpc_passthru(wish_rpc_client_t* client, bson* bs, rpc_client_callback c
     return wish_rpc_passthru_context(client, bs, cb, NULL);
 }
 
-int wish_rpc_passthru_context(wish_rpc_client_t* client, bson* bs, rpc_client_callback cb, void* ctx) {
+int wish_rpc_passthru_context(wish_rpc_client_t* client, const bson* bs, rpc_client_callback cb, void* ctx) {
     if(client->send == NULL) {
         WISHDEBUG(LOG_CRITICAL, "Passthru has no send function");
         return 0;
