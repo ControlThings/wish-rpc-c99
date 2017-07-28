@@ -171,8 +171,6 @@ rpc_client_req* find_request_entry(wish_rpc_client_t *c, wish_rpc_id_t id);
 
 rpc_client_req* find_passthrough_request_entry(wish_rpc_client_t *c, wish_rpc_id_t id);
 
-wish_rpc_id_t wish_rpc_client(wish_rpc_client_t *c, const char *op, const uint8_t *args, size_t args_len, rpc_client_callback cb, uint8_t *buffer, size_t buffer_len);
-
 wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t *c, const char* op, const uint8_t *args, size_t args_len, rpc_client_callback cb, uint8_t *buffer, size_t buffer_len);
 
 void wish_rpc_client_end_by_ctx(wish_rpc_client_t *c, void* ctx);

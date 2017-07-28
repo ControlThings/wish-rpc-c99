@@ -699,9 +699,9 @@ int wish_rpc_client_handle_res(wish_rpc_client_t* c, void* ctx, const uint8_t* d
     
     bson_iterator it;
     
-    if (bson_find_from_buffer(&it, data, "ack") != BSON_INT) {
+    if (bson_find_from_buffer(&it, data, "ack") == BSON_INT) {
         id = bson_iterator_int(&it);
-        
+    } else {
         if (bson_find_from_buffer(&it, data, "sig") == BSON_INT) {
             id = bson_iterator_int(&it);
             //WISHDEBUG(LOG_DEBUG, "Sig id %i", id);
@@ -727,6 +727,7 @@ int wish_rpc_client_handle_res(wish_rpc_client_t* c, void* ctx, const uint8_t* d
     
     if (rpc_entry == NULL) {
         WISHDEBUG(LOG_CRITICAL, "No RPC entry for id %d", id);
+        bson_visit("No RPC entry for id", data);
         retval = 1;
     } else {
         
