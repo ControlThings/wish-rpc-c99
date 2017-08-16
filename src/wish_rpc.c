@@ -522,7 +522,7 @@ void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context
         req->server = server;
         //req->send = wish_core_app_rpc_send; // This was moved to server->send
         req->send_context = req;
-        memcpy(req->op_str, op, MAX_RPC_OP_LEN);
+        strncpy(req->op_str, op, MAX_RPC_OP_LEN);
         req->id = id;
         req->ctx = ctx;
         req->context = context;
