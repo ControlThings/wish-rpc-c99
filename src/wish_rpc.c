@@ -32,6 +32,10 @@ wish_rpc_server_t* wish_rpc_server_init_size(void* context, rpc_server_send_cb c
     return server;
 }
 
+void wish_rpc_server_set_acl(wish_rpc_server_t* server, rpc_acl_check_handler acl_check) {
+    server->acl_check = acl_check;
+}
+
 void wish_rpc_server_set_name(wish_rpc_server_t* server, const char* name) {
     strncpy(server->name, name, MAX_RPC_SERVER_NAME_LEN);
 }
@@ -192,7 +196,7 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, const char* op,
     
     // show active requests
     
-    //WISHDEBUG(LOG_CRITICAL, "rpc_client %p", c);
+    WISHDEBUG(LOG_CRITICAL, "rpc_client %p, looking for id: %d", c, id);
     
     struct wish_rpc_entry *entry = c->list_head;
     while (entry != NULL) {
@@ -454,6 +458,17 @@ void wish_rpc_server_delete_rpc_ctx(rpc_server_req *rpc_ctx) {
     }
 }
 
+static void acl_decision(rpc_server_req* req, bool allowed) {
+    if (!allowed) {
+        wish_rpc_server_error(req, 200, "Permission denied.");
+        return;
+    }
+    
+    if (wish_rpc_server_handle(req->server, req, args)) {
+        WISHDEBUG(LOG_DEBUG, "RPC server fail: wish_core_app_rpc_func");
+    }
+}
+
 void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context, const bson* msg) {
     // TODO: refactor to use the bson directly, not like this.
     const char* data = bson_data(msg);
@@ -500,7 +515,7 @@ void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context
     if (bson_find_fieldpath_value("id", &it) == BSON_INT) {
         id = bson_iterator_int(&it);
     }
-
+    
     struct wish_rpc_context_list_elem *list_elem = wish_rpc_server_get_free_rpc_ctx_elem(server);
     
     if (list_elem == NULL) {
@@ -527,9 +542,13 @@ void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context
         req->ctx = ctx;
         req->context = context;
         //memcpy(req->local_wsid, src_wsid, WISH_WSID_LEN);
-    
-        if (wish_rpc_server_handle(server, req, args)) {
-            WISHDEBUG(LOG_DEBUG, "RPC server fail: wish_core_app_rpc_func");
+
+        if (server->acl_check) {
+            server->acl_check(req, op, "call", acl_decision);
+        } else {
+            if (wish_rpc_server_handle(server, req, args)) {
+                WISHDEBUG(LOG_DEBUG, "RPC server fail: wish_core_app_rpc_func");
+            }
         }
     }
 

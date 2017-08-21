@@ -67,7 +67,32 @@ struct wish_rpc_context_list_elem {
     struct wish_rpc_context_list_elem *next;
 };
 
-typedef void (*rpc_op_handler)(struct wish_rpc_context *rpc_ctx, const uint8_t *args_array);
+typedef void (*rpc_op_handler)(rpc_server_req* rpc_ctx, const uint8_t* args);
+
+
+/**
+ * Access control decision callback
+ * 
+ * Called in rpc_acl_handler implementation.
+ * 
+ * decision(true, NULL)
+ * decision(true, BSON({data: ['read','write','invoke']}))
+ * decision(false, NULL)
+ * 
+ */
+typedef void (*rpc_acl_check_decision_cb)(rpc_server_req* req, bool allowed);
+
+/**
+ * Access control plug-in function
+ * 
+ * Add to WishRpc using wish_rpc_server_set_acl(rpc_acl_handler my_acl_checker)
+ * 
+ * @resource Resource identifier eg. ucp#model.battery.level
+ * @permission Permission name eg. "read", "write", "send", "call" or "access"
+ * @ctx Context for acl handler, eg. wish_protocol_peer_t*
+ * @decision Callback for handler to call when it has decided permissions i.e. decision(true, BSON(['read', 'write'])
+ */
+typedef void (*rpc_acl_check_handler)(rpc_server_req* req, const uint8_t* resource, const uint8_t* permission, void* ctx, rpc_acl_check_decision_cb decision);
 
 struct wish_rpc_client_t;
 
@@ -136,6 +161,8 @@ typedef struct wish_rpc_server {
     rpc_server_send_cb send;    
     /** A list representing the requests that have arrived to the RPC server. Used in for example to emit 'sig' responses */
     struct wish_rpc_context_list_elem *request_list_head;
+    /** Access control implementation */
+    rpc_acl_check_handler acl_check;
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
     /** RPC contexts of incoming requests are stored to this pool */
     struct wish_rpc_context_list_elem *rpc_ctx_pool;
@@ -147,6 +174,10 @@ typedef struct wish_rpc_server {
 wish_rpc_server_t* wish_rpc_server_init(void* context, rpc_server_send_cb cb);
 
 wish_rpc_server_t* wish_rpc_server_init_size(void* context, rpc_server_send_cb cb, int size);
+
+// acl_check(resource, acl, context, cb) { cb(err, allowed, permissions) }
+
+void wish_rpc_server_set_acl(wish_rpc_server_t* server, rpc_acl_check_handler acl);
 
 void wish_rpc_server_set_name(wish_rpc_server_t* server, const char* name);
 
