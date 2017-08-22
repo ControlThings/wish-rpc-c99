@@ -36,6 +36,10 @@ typedef struct wish_rpc_context {
      * The operator string is used to select the handler registered in the server
      */
     char op_str[MAX_RPC_OP_LEN];
+    /**
+     * Arguments for RPC command
+     */
+    const char* args;
     /** Request ID */
     int id;
     /** 

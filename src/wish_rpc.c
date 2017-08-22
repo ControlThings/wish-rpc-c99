@@ -464,7 +464,7 @@ static void acl_decision(rpc_server_req* req, bool allowed) {
         return;
     }
     
-    if (wish_rpc_server_handle(req->server, req, args)) {
+    if (wish_rpc_server_handle(req->server, req, req->args)) {
         WISHDEBUG(LOG_DEBUG, "RPC server fail: wish_core_app_rpc_func");
     }
 }
@@ -541,17 +541,17 @@ void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context
         req->id = id;
         req->ctx = ctx;
         req->context = context;
+        req->args = args;
         //memcpy(req->local_wsid, src_wsid, WISH_WSID_LEN);
 
         if (server->acl_check) {
-            server->acl_check(req, op, "call", acl_decision);
+            server->acl_check(req, op, "call", NULL, acl_decision);
         } else {
             if (wish_rpc_server_handle(server, req, args)) {
                 WISHDEBUG(LOG_DEBUG, "RPC server fail: wish_core_app_rpc_func");
             }
         }
     }
-
 }
 
 /* { data: bson_element ack: req_id } */
