@@ -193,9 +193,8 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, const char* op,
     
     bson_finish(&bs);
 
-    
+    /*
     // show active requests
-    
     WISHDEBUG(LOG_CRITICAL, "rpc_client %p, looking for id: %d", c, id);
     
     struct wish_rpc_entry *entry = c->list_head;
@@ -203,6 +202,7 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, const char* op,
         WISHDEBUG(LOG_CRITICAL, "  entry: %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
         entry = entry->next;
     }
+    */
     
     //bson_visit("wish_app_core: BSON Dump", bs.data);
     
