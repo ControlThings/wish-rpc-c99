@@ -190,11 +190,17 @@ void wish_rpc_server_add_handler(wish_rpc_server_t *s, char *op_str, rpc_op_hand
 
 void wish_rpc_server_register(wish_rpc_server_t *s, struct wish_rpc_server_handler* handler);
 
-/** 
+/**
  * Handle an RPC request to an RPC server
  * 
- * Returns 0, if the request was valid, and 1 if there was no handler to this "op" */
-int wish_rpc_server_handle(wish_rpc_server_t *s, struct wish_rpc_context *wish_rcp_ctx, const uint8_t *args_array);
+ * Returns 0, if the request was valid, and 1 if there was no handler to this "op" 
+ * 
+ * @param s the RPC server instance
+ * @param rpc_ctx the RPC request context, NOTE: it must be obtained via wish_rpc_server_get_free_rpc_ctx_elem()
+ * @param args the request argument BSON array
+ * @return 0 for success, 1 for fail
+ */
+int wish_rpc_server_handle(wish_rpc_server_t* server, struct wish_rpc_context* wish_rcp_ctx, const uint8_t* args);
 
 void wish_rpc_server_end(wish_rpc_server_t *s, int end);
 
