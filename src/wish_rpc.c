@@ -183,7 +183,7 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, const char* op,
         }
         bson_append_element(&bs, "args", &it);
     }
-    
+
     wish_rpc_id_t id = 0;
     
     if (cb != NULL) {
@@ -193,8 +193,13 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, const char* op,
     
     bson_finish(&bs);
 
-    /*
+    if (bs.err) {
+        
+        return 0;
+    }
+    
     // show active requests
+    
     WISHDEBUG(LOG_CRITICAL, "rpc_client %p, looking for id: %d", c, id);
     
     struct wish_rpc_entry *entry = c->list_head;
@@ -202,7 +207,6 @@ wish_rpc_id_t wish_rpc_client_bson(wish_rpc_client_t* c, const char* op,
         WISHDEBUG(LOG_CRITICAL, "  entry: %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
         entry = entry->next;
     }
-    */
     
     //bson_visit("wish_app_core: BSON Dump", bs.data);
     
@@ -460,7 +464,7 @@ void wish_rpc_server_delete_rpc_ctx(rpc_server_req *rpc_ctx) {
 
 static void acl_decision(rpc_server_req* req, bool allowed) {
     if (!allowed) {
-        wish_rpc_server_error(req, 200, "Permission denied.");
+        wish_rpc_server_error_msg(req, 200, "Permission denied.");
         return;
     }
     
@@ -530,7 +534,7 @@ void wish_rpc_server_receive(wish_rpc_server_t* server, void* ctx, void* context
         err_req.context = context;
         //memcpy(err_req.local_wsid, src_wsid, WISH_WSID_LEN);
         
-        wish_rpc_server_error(&err_req, 63, "Core requests full for apps.");
+        wish_rpc_server_error_msg(&err_req, 63, "Core requests full for apps.");
         return;
     } else {
         rpc_server_req* req = &(list_elem->request_ctx);
@@ -659,8 +663,60 @@ int wish_rpc_server_emit(rpc_server_req *req, const uint8_t *response, size_t re
     return 0;
 }
 
+int wish_rpc_server_error(rpc_server_req *req, const uint8_t *response, size_t response_len) {
+    
+    int buffer_len = response_len + 512;
+    char buffer[buffer_len];
+    
+    bson bs;
+    bson_init_buffer(&bs, buffer, buffer_len);
+
+    if(response == NULL) {
+        // send ack without any data
+        bson_append_int(&bs, "err", req->id);
+        bson_finish(&bs);
+    } else {
+        // expect bson document with data property
+        bson_iterator it;
+        bson_find_from_buffer(&it, response, "data");
+        
+        bson_type type = bson_iterator_type(&it);
+        
+        // FIXME check type under iterator is valid
+        if (type == BSON_STRING) {
+            bson_append_string(&bs, "data", bson_iterator_string(&it));
+        } else if (type == BSON_BOOL) {
+            bson_append_bool(&bs, "data", bson_iterator_bool(&it));
+        } else if (type == BSON_INT) {
+            bson_append_int(&bs, "data", bson_iterator_int(&it));
+        } else if (type == BSON_DOUBLE) {
+            bson_append_double(&bs, "data", bson_iterator_double(&it));
+        } else if (type == BSON_BINDATA) {
+            bson_append_binary(&bs, "data", bson_iterator_bin_data(&it), bson_iterator_bin_len(&it));
+        } else if (type == BSON_OBJECT) {
+            bson_append_element(&bs, "data", &it);
+        } else if (type == BSON_ARRAY) {
+            bson_append_element(&bs, "data", &it);
+        } else {
+            WISHDEBUG(LOG_CRITICAL, "Unsupported bson type %i in wish_rpc_server_send", type);
+        }
+        
+        bson_append_int(&bs, "err", req->id);
+        bson_finish(&bs);
+    }
+    if (bs.err) {
+        WISHDEBUG(LOG_CRITICAL, "BSON error in wish_rpc_server_emit %i %s buf %i res %i", bs.err, bs.errstr, buffer_len, response_len);
+        return 1;
+    }
+    
+    //WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_emit: res_len %i, bson_size: %i", response_len, bson_size(&bs));
+    
+    req->server->send(req->send_context, &bs);
+    return 0;
+}
+
 /* { data: { code: errno, msg: errstr } err: req_id } */
-int wish_rpc_server_error(rpc_server_req* ctx, int code, const uint8_t *msg) {
+int wish_rpc_server_error_msg(rpc_server_req* ctx, int code, const uint8_t *msg) {
     //WISHDEBUG(LOG_CRITICAL, "Generating rpc_error: %i %s", code, msg);
     if (strnlen(msg, WISH_RPC_ERR_MSG_MAX_LEN) == WISH_RPC_ERR_MSG_MAX_LEN) {
         WISHDEBUG(LOG_CRITICAL, "Error message too long in wish_rpc_server_error");
@@ -904,7 +960,7 @@ int wish_rpc_server_handle(wish_rpc_server_t *s, rpc_server_req *rpc_ctx, const 
         
         if(retval) {
             WISHDEBUG(LOG_CRITICAL, "RPC server %s does not contain op: %s.", s->name, rpc_ctx->op_str);
-            wish_rpc_server_error(rpc_ctx, 8, "Command not found or permission denied.");
+            wish_rpc_server_error_msg(rpc_ctx, 8, "Command not found or permission denied.");
             /* Not an existing handler. Delete the request context immediately. */
             wish_rpc_server_delete_rpc_ctx(rpc_ctx);
         }

@@ -226,7 +226,9 @@ int wish_rpc_server_send(struct wish_rpc_context *ctx, const uint8_t *response, 
 
 int wish_rpc_server_emit(struct wish_rpc_context *ctx, const uint8_t *response, size_t response_len);
 
-int wish_rpc_server_error(struct wish_rpc_context *ctx, int code, const uint8_t *msg);
+int wish_rpc_server_error(struct wish_rpc_context *ctx, const uint8_t *response, size_t response_len);
+
+int wish_rpc_server_error_msg(struct wish_rpc_context *ctx, int code, const uint8_t *msg);
 
 rpc_server_req* wish_rpc_server_req_by_id(wish_rpc_server_t* s, int id);
 
