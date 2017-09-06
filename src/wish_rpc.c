@@ -570,6 +570,8 @@ static int wish_rpc_server_send2(rpc_server_req* req, const uint8_t* response, s
             bson_append_string(&bs, "data", bson_iterator_string(&it));
         } else if (bt == BSON_BOOL) {
             bson_append_bool(&bs, "data", bson_iterator_bool(&it));
+        } else if (bt == BSON_NULL) {
+            bson_append_null(&bs, "data");
         } else if (bt == BSON_INT) {
             bson_append_int(&bs, "data", bson_iterator_int(&it));
         } else if (bt == BSON_DOUBLE) {
