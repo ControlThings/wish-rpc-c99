@@ -22,8 +22,8 @@ rpc_server* wish_rpc_server_init_size(void* context, rpc_server_send_cb cb, int 
     memset(server, 0, sizeof(rpc_server));
     
     server->requests = NULL;
-    server->rpc_ctx_pool = wish_platform_malloc(sizeof(struct wish_rpc_context_list_elem)*size);
-    memset(server->rpc_ctx_pool, 0, sizeof(struct wish_rpc_context_list_elem)*size);
+    server->rpc_ctx_pool = wish_platform_malloc(sizeof(rpc_server_req_list)*size);
+    memset(server->rpc_ctx_pool, 0, sizeof(rpc_server_req_list)*size);
     server->rpc_ctx_pool_num_slots = size;
     
     server->send = cb;
@@ -436,8 +436,8 @@ void wish_rpc_passthru_end(rpc_client* client, int id) {
 
 void wish_rpc_server_delete_rpc_ctx(rpc_server_req *rpc_ctx) {
     //WISHDEBUG(LOG_CRITICAL, "Searching for something to delete..");
-    struct wish_rpc_context_list_elem *list_elem = NULL;
-    struct wish_rpc_context_list_elem *tmp = NULL;
+    rpc_server_req_list *list_elem = NULL;
+    rpc_server_req_list *tmp = NULL;
     LL_FOREACH_SAFE(rpc_ctx->server->requests, list_elem, tmp) {
         if (&(list_elem->request_ctx) == rpc_ctx) {
             //WISHDEBUG(LOG_CRITICAL, "Deleting rpc ctx");
@@ -512,7 +512,7 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
         id = bson_iterator_int(&it);
     }
     
-    struct wish_rpc_context_list_elem *list_elem = wish_rpc_server_get_free_rpc_ctx_elem(server);
+    rpc_server_req_list *list_elem = wish_rpc_server_get_free_rpc_ctx_elem(server);
     
     if (list_elem == NULL) {
         WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_receive: out of memory (%s)", server->name);
@@ -649,7 +649,7 @@ int wish_rpc_server_error_msg(rpc_server_req* req, int code, const uint8_t *msg)
 
 void wish_rpc_server_emit_broadcast(rpc_server* server, char* op, const uint8_t *data, size_t data_len) {
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    struct wish_rpc_context_list_elem *request;
+    rpc_server_req_list *request;
     LL_FOREACH(server->requests, request) {
 
         if (strncmp(request->request_ctx.op, op, MAX_RPC_OP_LEN) == 0) {
@@ -820,7 +820,7 @@ int wish_rpc_server_handle(rpc_server* s, rpc_server_req* req, const uint8_t *ar
 }
 
 rpc_server_req* wish_rpc_server_req_by_id(rpc_server *s, int id) {
-    struct wish_rpc_context_list_elem* request;
+    rpc_server_req_list* request;
     LL_FOREACH(s->requests, request) {
 
         if (request->request_ctx.id == id) {
@@ -835,7 +835,7 @@ rpc_server_req* wish_rpc_server_req_by_id(rpc_server *s, int id) {
 void wish_rpc_server_end(rpc_server *s, int id) {
     rpc_server_req *rpc_ctx = NULL;
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    struct wish_rpc_context_list_elem *request;
+    rpc_server_req_list *request;
     LL_FOREACH(s->requests, request) {
 
         if (request->request_ctx.id == id) {
@@ -861,7 +861,7 @@ void wish_rpc_server_end(rpc_server *s, int id) {
 void wish_rpc_server_end_by_ctx(rpc_server *s, void* ctx) {
     rpc_server_req *rpc_ctx = NULL;
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    struct wish_rpc_context_list_elem *request;
+    rpc_server_req_list *request;
     LL_FOREACH(s->requests, request) {
 
         if (request->request_ctx.ctx == ctx) {
@@ -887,8 +887,8 @@ void wish_rpc_server_end_by_ctx(rpc_server *s, void* ctx) {
 
 void wish_rpc_server_end_by_context(rpc_server *s, void* context) {
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    struct wish_rpc_context_list_elem *request;
-    struct wish_rpc_context_list_elem *tmp;
+    rpc_server_req_list *request;
+    rpc_server_req_list *tmp;
     
     LL_FOREACH_SAFE(s->requests, request, tmp) {
 
