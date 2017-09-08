@@ -434,21 +434,22 @@ void wish_rpc_passthru_end(rpc_client* client, int id) {
     wish_rpc_client_end_by_id(client, id);
 }
 
-void wish_rpc_server_delete_rpc_ctx(rpc_server_req *rpc_ctx) {
+void wish_rpc_server_delete_rpc_ctx(rpc_server_req* req) {
     //WISHDEBUG(LOG_CRITICAL, "Searching for something to delete..");
-    rpc_server_req_list *list_elem = NULL;
-    rpc_server_req_list *tmp = NULL;
-    LL_FOREACH_SAFE(rpc_ctx->server->requests, list_elem, tmp) {
-        if (&(list_elem->request_ctx) == rpc_ctx) {
+    rpc_server_req_list* elm = NULL;
+    rpc_server_req_list* tmp = NULL;
+    
+    LL_FOREACH_SAFE(req->server->requests, elm, tmp) {
+        if (&(elm->request_ctx) == req) {
             //WISHDEBUG(LOG_CRITICAL, "Deleting rpc ctx");
            
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
-            memset(rpc_ctx->op, 0, MAX_RPC_OP_LEN);
+            memset(req->op, 0, MAX_RPC_OP_LEN);
 #else
 #error not implemented
             //wish_platform_free....
 #endif
-            LL_DELETE(rpc_ctx->server->requests, list_elem);
+            LL_DELETE(req->server->requests, elm);
             break;
         }
     }
@@ -524,7 +525,11 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
         err_req.ctx = ctx;
         err_req.context = context;
         
-        wish_rpc_server_error_msg(&err_req, 63, "Core requests full for apps.");
+        char err_str[256];
+        
+        wish_platform_sprintf(err_str, "rpc-server request memory full: %s", server->name);
+        
+        wish_rpc_server_error_msg(&err_req, 63, err_str);
         return;
     } else {
         rpc_server_req* req = &(list_elem->request_ctx);
@@ -721,7 +726,7 @@ int wish_rpc_client_handle_res(rpc_client* c, void* ctx, const uint8_t* data, si
 /** Server: Add a RPC handler */
 void wish_rpc_server_register(rpc_server *s, rpc_handler* handler) {
     /* Find correct place to add the new handler new_h */
-    rpc_handler *h = s->handlers;
+    rpc_handler* h = s->handlers;
 
     if (h == NULL) {
         WISHDEBUG(LOG_DEBUG, "The RPC server %s does not have any handlers, adding first entry", s->name);
@@ -859,38 +864,28 @@ void wish_rpc_server_end(rpc_server *s, int id) {
 }
 
 void wish_rpc_server_end_by_ctx(rpc_server *s, void* ctx) {
-    rpc_server_req *rpc_ctx = NULL;
+    rpc_server_req* req = NULL;
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
     rpc_server_req_list *request;
     LL_FOREACH(s->requests, request) {
-
         if (request->request_ctx.ctx == ctx) {
-            rpc_ctx = &request->request_ctx;
-            break;
+            req = &request->request_ctx;
+            
+            if(req->end != NULL) { req->end(req); }
+            wish_rpc_server_delete_rpc_ctx(req);
+            
+            //WISHDEBUG(LOG_CRITICAL, "RPC server %s cleaned up request with id: %i and ctx pointer: %p.", s->name, req->id, ctx);
         }
-    }    
-    
-    // Searching for RPC handler op rpc_ctx->op_str
-    if (rpc_ctx != NULL) {
-        /* Call the end handler if it is set */
-        if(rpc_ctx->end != NULL) { rpc_ctx->end(rpc_ctx); }
-
-        /* Delete the request context */
-        wish_rpc_server_delete_rpc_ctx(rpc_ctx);
-        
-        //WISHDEBUG(LOG_CRITICAL, "RPC server %s cleaned up request with id: %i and ctx pointer: %p.", s->server_name, rpc_ctx->id, ctx);
-    } else {
-        WISHDEBUG(LOG_DEBUG, "RPC server %s has no request with ctx: %p.", s->name, ctx);
     }
 }
 
 
-void wish_rpc_server_end_by_context(rpc_server *s, void* context) {
+void wish_rpc_server_end_by_context(rpc_server* server, void* context) {
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    rpc_server_req_list *request;
-    rpc_server_req_list *tmp;
+    rpc_server_req_list* request;
+    rpc_server_req_list* tmp;
     
-    LL_FOREACH_SAFE(s->requests, request, tmp) {
+    LL_FOREACH_SAFE(server->requests, request, tmp) {
 
         if (request->request_ctx.context == context) {
             rpc_server_req *rpc_ctx = &request->request_ctx;
