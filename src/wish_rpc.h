@@ -17,7 +17,7 @@ typedef int32_t wish_rpc_id_t;
 struct wish_rpc_server;
 struct wish_rpc_context;
 
-#define MAX_RPC_OP_LEN 32
+#define MAX_RPC_OP_LEN 48
 #define MAX_RPC_SERVER_NAME_LEN 16
 /* This defines the maximum length of an RPC error message */
 #define WISH_RPC_ERR_MSG_MAX_LEN 256

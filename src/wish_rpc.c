@@ -304,9 +304,11 @@ static void wish_rpc_passthru_cb(rpc_client_req* req, void* ctx, const uint8_t* 
     
     //WISHDEBUG(LOG_CRITICAL, "passthru callback switched ack(id) back: %i to %i", id, req->passthru_id);
     
-    rpc_client_callback cb = req->passthru_cb;
-    // should ctx actaully be req->passthru_ctx ?
-    cb(req, ctx, payload, payload_len);
+    if (req->passthru_cb != NULL) {
+        rpc_client_callback cb = req->passthru_cb;
+        // should ctx actaully be req->passthru_ctx ?
+        cb(req, ctx, payload, payload_len);
+    }
     
     if (end) {
         //WISHDEBUG(LOG_CRITICAL, "END passthru cleanup");
@@ -530,6 +532,18 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
         wish_platform_sprintf(err_str, "rpc-server request memory full: %s", server->name);
         
         wish_rpc_server_error_msg(&err_req, 63, err_str);
+        return;
+    } else if ( strnlen(op, MAX_RPC_OP_LEN) >= MAX_RPC_OP_LEN ) {
+        WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_receive(%s): too long op string.", server->name);
+        
+        rpc_server_req err_req;
+        err_req.server = server;
+        err_req.send_context = &err_req;
+        err_req.id = id;
+        err_req.ctx = ctx;
+        err_req.context = context;
+        
+        wish_rpc_server_error_msg(&err_req, 63, "Op string is too long.");
         return;
     } else {
         rpc_server_req* req = &(list_elem->request_ctx);
