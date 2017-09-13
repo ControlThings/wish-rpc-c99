@@ -191,6 +191,11 @@ wish_rpc_id_t wish_rpc_client_bson(rpc_client* c, const char* op,
         bson_append_int(&bs, "id", id);
     }
     
+    if (bs.err) {
+        WISHDEBUG(LOG_CRITICAL, "wish_rpc_client_bson error writing bson");
+        return 0;
+    }
+    
     bson_finish(&bs);
 
     
