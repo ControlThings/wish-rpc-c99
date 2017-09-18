@@ -102,6 +102,7 @@ rpc_client_req* find_passthrough_request_entry(rpc_client *c, wish_rpc_id_t id) 
     return entry;
 }
 
+/*
 static rpc_client_req* find_request_entry_by_ctx(rpc_client *c, void* ctx) {
     rpc_client_req* entry = c->requests;
     while (entry != NULL) {
@@ -112,6 +113,7 @@ static rpc_client_req* find_request_entry_by_ctx(rpc_client *c, void* ctx) {
     }
     return entry;
 }
+*/
 
 static void delete_request_entry(rpc_client *c, wish_rpc_id_t id) {
     rpc_client_req* entry = c->requests;
