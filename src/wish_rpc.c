@@ -22,14 +22,26 @@ rpc_server* wish_rpc_server_init_size(void* context, rpc_server_send_cb cb, int 
     memset(server, 0, sizeof(rpc_server));
     
     server->requests = NULL;
+    
+#ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
     server->rpc_ctx_pool = wish_platform_malloc(sizeof(rpc_server_req_list)*size);
     memset(server->rpc_ctx_pool, 0, sizeof(rpc_server_req_list)*size);
     server->rpc_ctx_pool_num_slots = size;
+#else
+    // server->rpc_ctx_pool = NULL;
+    // server->rpc_ctx_pool_num_slots = 0;
+#endif
     
     server->send = cb;
     server->context = context;
     
     return server;
+}
+
+void wish_rpc_server_destroy(rpc_server* server) {
+    if (server != NULL) {
+        wish_platform_free(server);
+    }
 }
 
 void wish_rpc_server_set_acl(rpc_server* server, rpc_acl_check_handler acl_check) {
@@ -452,13 +464,13 @@ void wish_rpc_server_delete_rpc_ctx(rpc_server_req* req) {
         if (&(elm->request_ctx) == req) {
             //WISHDEBUG(LOG_CRITICAL, "Deleting rpc ctx");
            
+            LL_DELETE(req->server->requests, elm);
+            
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
             memset(req->op, 0, MAX_RPC_OP_LEN);
 #else
-#error not implemented
-            //wish_platform_free....
+            wish_platform_free(req);
 #endif
-            LL_DELETE(req->server->requests, elm);
             break;
         }
     }
@@ -789,7 +801,8 @@ rpc_server_req_list* wish_rpc_server_get_free_rpc_ctx_elem(rpc_server *s) {
         */
     }
 #else
-#error not implemented
+    free_elem = wish_platform_malloc(sizeof(rpc_server_req_list));
+    LL_APPEND(s->requests, free_elem);
 #endif
     return free_elem;
 }
@@ -799,6 +812,10 @@ void wish_rpc_server_print(rpc_server *s) {
     // Count the active number of requests
     int i;
     int c = 0;
+    
+    rpc_server_req_list* elm = NULL;
+    
+#ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
     for (i = 0; i < s->rpc_ctx_pool_num_slots; i++) {
         // A request pool slot is empty if the op_str is empty.
         if (strnlen(s->rpc_ctx_pool[i].request_ctx.op, MAX_RPC_OP_LEN) != 0) {
@@ -806,6 +823,13 @@ void wish_rpc_server_print(rpc_server *s) {
             WISHDEBUG(LOG_CRITICAL, "  %s", s->rpc_ctx_pool[i].request_ctx.op);
         }
     }
+#else
+    LL_FOREACH(s->requests, elm) {
+        WISHDEBUG(LOG_CRITICAL, "  %s", elm->request_ctx.op);
+        c++;
+    }
+#endif    
+    
     WISHDEBUG(LOG_CRITICAL, "  requests registered %i", c);
 }
 

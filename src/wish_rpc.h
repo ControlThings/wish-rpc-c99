@@ -154,7 +154,7 @@ typedef struct wish_rpc_server_handler {
 
 /* If WISH_RPC_SERVER_STATIC_REQUEST_POOL is defined, you must supply the RPC server with a statically allocated buffer for storing wish_rpc_ctx structures.
  You must also initialise wish_rpc_server_t.rpc_ctx_pool_num_slots accordingly. */
-#define WISH_RPC_SERVER_STATIC_REQUEST_POOL
+//#define WISH_RPC_SERVER_STATIC_REQUEST_POOL
 
 typedef struct wish_rpc_server {
     char name[MAX_RPC_SERVER_NAME_LEN];
