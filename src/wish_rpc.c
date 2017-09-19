@@ -773,7 +773,7 @@ void wish_rpc_server_register(rpc_server *s, rpc_handler* handler) {
 }
 
 rpc_server_req_list* wish_rpc_server_get_free_rpc_ctx_elem(rpc_server *s) {
-    rpc_server_req_list* free_elem = NULL;
+    rpc_server_req_list* reql = NULL;
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
     if (s == NULL || s->rpc_ctx_pool_num_slots == 0 || s->rpc_ctx_pool == NULL) {
         WISHDEBUG(LOG_CRITICAL, "RPC server %s: Cannot save RPC request context!", s->name);
@@ -783,8 +783,8 @@ rpc_server_req_list* wish_rpc_server_get_free_rpc_ctx_elem(rpc_server *s) {
             /* A request pool slot is empty if the op_str is empty. */
             if (strnlen(s->rpc_ctx_pool[i].request_ctx.op, MAX_RPC_OP_LEN) == 0) {
                 /* Found free request pool slot */
-                free_elem = &(s->rpc_ctx_pool[i]);
-                LL_APPEND(s->requests, free_elem);
+                reql = &(s->rpc_ctx_pool[i]);
+                LL_APPEND(s->requests, reql);
                 break;
             } 
         }
@@ -801,10 +801,11 @@ rpc_server_req_list* wish_rpc_server_get_free_rpc_ctx_elem(rpc_server *s) {
         */
     }
 #else
-    free_elem = wish_platform_malloc(sizeof(rpc_server_req_list));
-    LL_APPEND(s->requests, free_elem);
+    reql = wish_platform_malloc(sizeof(rpc_server_req_list));
+    memset(reql, 0, sizeof(rpc_server_req_list));
+    LL_APPEND(s->requests, reql);
 #endif
-    return free_elem;
+    return reql;
 }
 
 void wish_rpc_server_print(rpc_server *s) {
@@ -851,6 +852,7 @@ int wish_rpc_server_handle(rpc_server* s, rpc_server_req* req, const uint8_t *ar
                 retval = 0;
                 
                 if (req->id == 0) {
+                    WISHDEBUG(LOG_CRITICAL, "not expecting response, deleting... %s %p", req->op, req);
                     /* No request id. Delete the request context immediately. */
                     wish_rpc_server_delete_rpc_ctx(req);
                 }
