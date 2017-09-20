@@ -24,8 +24,8 @@ rpc_server* wish_rpc_server_init_size(void* context, rpc_server_send_cb cb, int 
     server->requests = NULL;
     
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
-    server->rpc_ctx_pool = wish_platform_malloc(sizeof(rpc_server_req_list)*size);
-    memset(server->rpc_ctx_pool, 0, sizeof(rpc_server_req_list)*size);
+    server->rpc_ctx_pool = wish_platform_malloc(sizeof(rpc_server_req)*size);
+    memset(server->rpc_ctx_pool, 0, sizeof(rpc_server_req)*size);
     server->rpc_ctx_pool_num_slots = size;
 #else
     // server->rpc_ctx_pool = NULL;
@@ -456,12 +456,12 @@ void wish_rpc_passthru_end(rpc_client* client, int id) {
 }
 
 void wish_rpc_server_delete_rpc_ctx(rpc_server_req* req) {
-    //WISHDEBUG(LOG_CRITICAL, "Searching for something to delete..");
-    rpc_server_req_list* elm = NULL;
-    rpc_server_req_list* tmp = NULL;
+    //WISHDEBUG(LOG_CRITICAL, "Searching for something to delete.. %p %p %p", req, req->server, req->server->requests);
+    rpc_server_req* elm = NULL;
+    rpc_server_req* tmp = NULL;
     
     LL_FOREACH_SAFE(req->server->requests, elm, tmp) {
-        if (&(elm->request_ctx) == req) {
+        if (elm == req) {
             //WISHDEBUG(LOG_CRITICAL, "Deleting rpc ctx");
            
             LL_DELETE(req->server->requests, elm);
@@ -534,9 +534,9 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
         id = bson_iterator_int(&it);
     }
     
-    rpc_server_req_list *list_elem = wish_rpc_server_get_free_rpc_ctx_elem(server);
+    rpc_server_req *request = wish_rpc_server_get_free_req(server);
     
-    if (list_elem == NULL) {
+    if (request == NULL) {
         WISHDEBUG(LOG_CRITICAL, "wish_rpc_server_receive: out of memory (%s)", server->name);
         
         rpc_server_req err_req;
@@ -565,7 +565,7 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
         wish_rpc_server_error_msg(&err_req, 63, "Op string is too long.");
         return;
     } else {
-        rpc_server_req* req = &(list_elem->request_ctx);
+        rpc_server_req* req = request;
         req->server = server;
         req->send_context = req;
         strncpy(req->op, op, MAX_RPC_OP_LEN);
@@ -578,13 +578,20 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
             server->acl_check(req, op, "call", NULL, acl_decision);
         } else {
             if (wish_rpc_server_handle(server, req, args)) {
-                WISHDEBUG(LOG_DEBUG, "RPC server fail: wish_core_app_rpc_func");
+                WISHDEBUG(LOG_CRITICAL, "RPC server %s does not contain op: %s.", server->name, req->op);
+                wish_rpc_server_error_msg(req, 8, "Command not found or permission denied.");
             }
         }
     }
 }
 
 static int wish_rpc_server_send2(rpc_server_req* req, const uint8_t* response, size_t response_len, const char* type, bool delete) {
+
+    if (req->id == 0) {
+        // we should not send any response, just delete the request
+        wish_rpc_server_delete_rpc_ctx(req);
+        return 0;
+    }
     
     int buffer_len = response_len + 512;
     char buffer[buffer_len];
@@ -592,7 +599,7 @@ static int wish_rpc_server_send2(rpc_server_req* req, const uint8_t* response, s
     bson bs;
     bson_init_buffer(&bs, buffer, buffer_len);
 
-    if(response == NULL) {
+    if (response == NULL) {
         // send ack without any data
         bson_append_int(&bs, type, req->id);
         bson_finish(&bs);
@@ -687,11 +694,11 @@ int wish_rpc_server_error_msg(rpc_server_req* req, int code, const uint8_t *msg)
 
 void wish_rpc_server_emit_broadcast(rpc_server* server, char* op, const uint8_t *data, size_t data_len) {
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    rpc_server_req_list *request;
-    LL_FOREACH(server->requests, request) {
+    rpc_server_req* req;
+    LL_FOREACH(server->requests, req) {
 
-        if (strncmp(request->request_ctx.op, op, MAX_RPC_OP_LEN) == 0) {
-            wish_rpc_server_emit(&(request->request_ctx), data, data_len);
+        if (strncmp(req->op, op, MAX_RPC_OP_LEN) == 0) {
+            wish_rpc_server_emit(req, data, data_len);
         }
     }
 }
@@ -772,8 +779,8 @@ void wish_rpc_server_register(rpc_server *s, rpc_handler* handler) {
     }
 }
 
-rpc_server_req_list* wish_rpc_server_get_free_rpc_ctx_elem(rpc_server *s) {
-    rpc_server_req_list* reql = NULL;
+rpc_server_req* wish_rpc_server_get_free_req(rpc_server *s) {
+    rpc_server_req* req = NULL;
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
     if (s == NULL || s->rpc_ctx_pool_num_slots == 0 || s->rpc_ctx_pool == NULL) {
         WISHDEBUG(LOG_CRITICAL, "RPC server %s: Cannot save RPC request context!", s->name);
@@ -783,50 +790,42 @@ rpc_server_req_list* wish_rpc_server_get_free_rpc_ctx_elem(rpc_server *s) {
             /* A request pool slot is empty if the op_str is empty. */
             if (strnlen(s->rpc_ctx_pool[i].request_ctx.op, MAX_RPC_OP_LEN) == 0) {
                 /* Found free request pool slot */
-                reql = &(s->rpc_ctx_pool[i]);
-                LL_APPEND(s->requests, reql);
+                req = &(s->rpc_ctx_pool[i]);
+                LL_APPEND(s->requests, req);
                 break;
             } 
         }
-        /*
-        // Count the active number of requests
-        int c = 0;
-        for (i = 0; i < s->rpc_ctx_pool_num_slots; i++) {
-            // A request pool slot is empty if the op_str is empty.
-            if (strnlen(s->rpc_ctx_pool[i].request_ctx.op_str, MAX_RPC_OP_LEN) != 0) {
-                c++;
-            }
-        }
-        WISHDEBUG(LOG_CRITICAL, "RPC server %s: requests registered %i", s->server_name, c);
-        */
     }
 #else
-    reql = wish_platform_malloc(sizeof(rpc_server_req_list));
-    memset(reql, 0, sizeof(rpc_server_req_list));
-    LL_APPEND(s->requests, reql);
+    req = wish_platform_malloc(sizeof(rpc_server_req));
+    if (req) {
+        memset(req, 0, sizeof(rpc_server_req));
+        LL_APPEND(s->requests, req);
+    }
 #endif
-    return reql;
+    return req;
 }
 
 void wish_rpc_server_print(rpc_server *s) {
     WISHDEBUG(LOG_CRITICAL, "RPC server %s:", s->name);
     // Count the active number of requests
-    int i;
     int c = 0;
     
-    rpc_server_req_list* elm = NULL;
+    rpc_server_req* elm = NULL;
     
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
+    int i;
+    
     for (i = 0; i < s->rpc_ctx_pool_num_slots; i++) {
         // A request pool slot is empty if the op_str is empty.
-        if (strnlen(s->rpc_ctx_pool[i].request_ctx.op, MAX_RPC_OP_LEN) != 0) {
+        if (strnlen(s->rpc_ctx_pool[i].op, MAX_RPC_OP_LEN) != 0) {
             c++;
-            WISHDEBUG(LOG_CRITICAL, "  %s", s->rpc_ctx_pool[i].request_ctx.op);
+            WISHDEBUG(LOG_CRITICAL, "  %s", s->rpc_ctx_pool[i].op);
         }
     }
 #else
     LL_FOREACH(s->requests, elm) {
-        WISHDEBUG(LOG_CRITICAL, "  %s", elm->request_ctx.op);
+        WISHDEBUG(LOG_CRITICAL, "  %s", elm->op);
         c++;
     }
 #endif    
@@ -835,8 +834,6 @@ void wish_rpc_server_print(rpc_server *s) {
 }
 
 int wish_rpc_server_handle(rpc_server* s, rpc_server_req* req, const uint8_t *args) {
-
-    int retval = 1;
     rpc_handler *h = req->server->handlers;
     // Searching for RPC handler op rpc_ctx->op_str
     if (h == NULL) {
@@ -846,37 +843,24 @@ int wish_rpc_server_handle(rpc_server* s, rpc_server_req* req, const uint8_t *ar
         do {
             if (strncmp(h->op, req->op, MAX_RPC_OP_LEN) == 0) {
                 // Found handler
-                       
+
                 /* Call the RPC handler. */
                 h->handler(req, args);
-                retval = 0;
                 
-                if (req->id == 0) {
-                    WISHDEBUG(LOG_CRITICAL, "not expecting response, deleting... %s %p", req->op, req);
-                    /* No request id. Delete the request context immediately. */
-                    wish_rpc_server_delete_rpc_ctx(req);
-                }
-                break;
+                return 0;
             }
             h = h->next;
         } while (h != NULL);
-        
-        if(retval) {
-            WISHDEBUG(LOG_CRITICAL, "RPC server %s does not contain op: %s.", s->name, req->op);
-            wish_rpc_server_error_msg(req, 8, "Command not found or permission denied.");
-            /* Not an existing handler. Delete the request context immediately. */
-            wish_rpc_server_delete_rpc_ctx(req);
-        }
     }
-    return retval;
+    return 1;
 }
 
 rpc_server_req* wish_rpc_server_req_by_id(rpc_server *s, int id) {
-    rpc_server_req_list* request;
-    LL_FOREACH(s->requests, request) {
+    rpc_server_req* req;
+    LL_FOREACH(s->requests, req) {
 
-        if (request->request_ctx.id == id) {
-            return &request->request_ctx;
+        if (req->id == id) {
+            return req;
             break;
         }
     }
@@ -885,24 +869,24 @@ rpc_server_req* wish_rpc_server_req_by_id(rpc_server *s, int id) {
 }
 
 void wish_rpc_server_end(rpc_server *s, int id) {
-    rpc_server_req *rpc_ctx = NULL;
+    rpc_server_req *req = NULL;
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    rpc_server_req_list *request;
-    LL_FOREACH(s->requests, request) {
+    rpc_server_req* elm;
+    LL_FOREACH(s->requests, elm) {
 
-        if (request->request_ctx.id == id) {
-            rpc_ctx = &request->request_ctx;
+        if (elm->id == id) {
+            req = elm;
             break;
         }
     }    
     
     // Searching for RPC handler op rpc_ctx->op_str
-    if (rpc_ctx != NULL) {
+    if (req != NULL) {
         /* Call the end handler if it is set */
-        if(rpc_ctx->end != NULL) { rpc_ctx->end(rpc_ctx); }
+        if(req->end != NULL) { req->end(req); }
 
         /* Delete the request context */
-        wish_rpc_server_delete_rpc_ctx(rpc_ctx);
+        wish_rpc_server_delete_rpc_ctx(req);
         
         //WISHDEBUG(LOG_CRITICAL, "RPC server %s cleaned up request with id: %i.", s->server_name, id);
     } else {
@@ -913,14 +897,13 @@ void wish_rpc_server_end(rpc_server *s, int id) {
 void wish_rpc_server_end_by_ctx(rpc_server *s, void* ctx) {
     rpc_server_req* req = NULL;
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    rpc_server_req_list *request;
-    LL_FOREACH(s->requests, request) {
-        if (request->request_ctx.ctx == ctx) {
-            req = &request->request_ctx;
+    rpc_server_req* elm;
+    LL_FOREACH(s->requests, elm) {
+        if (elm->ctx == ctx) {
+            req = elm;
             
             if(req->end != NULL) { req->end(req); }
             wish_rpc_server_delete_rpc_ctx(req);
-            
             //WISHDEBUG(LOG_CRITICAL, "RPC server %s cleaned up request with id: %i and ctx pointer: %p.", s->name, req->id, ctx);
         }
     }
@@ -929,19 +912,19 @@ void wish_rpc_server_end_by_ctx(rpc_server *s, void* ctx) {
 
 void wish_rpc_server_end_by_context(rpc_server* server, void* context) {
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
-    rpc_server_req_list* request;
-    rpc_server_req_list* tmp;
+    rpc_server_req* elm;
+    rpc_server_req* tmp;
     
-    LL_FOREACH_SAFE(server->requests, request, tmp) {
+    LL_FOREACH_SAFE(server->requests, elm ,tmp) {
 
-        if (request->request_ctx.context == context) {
-            rpc_server_req *rpc_ctx = &request->request_ctx;
+        if (elm->context == context) {
+            rpc_server_req* req = elm;
             
             /* Call the end handler if it is set */
-            if(rpc_ctx->end != NULL) { rpc_ctx->end(rpc_ctx); }
+            if(req->end != NULL) { req->end(req); }
 
             /* Delete the request context */
-            wish_rpc_server_delete_rpc_ctx(rpc_ctx);
+            wish_rpc_server_delete_rpc_ctx(req);
             break;
         }
     }

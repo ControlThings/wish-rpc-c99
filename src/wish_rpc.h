@@ -60,16 +60,13 @@ typedef struct wish_rpc_context {
     void* send_context;
     /** If non-null this callback is called when a request is terminated */
     void (*end)(struct wish_rpc_context *req);
+    /** list pointer */
+    struct wish_rpc_context* next;
 } rpc_server_req;
 
 struct wish_rpc_entry;
 
 typedef void (*rpc_client_callback)(struct wish_rpc_entry* req, void *ctx, const uint8_t *payload, size_t payload_len);
-
-typedef struct wish_rpc_context_list_elem {
-    rpc_server_req request_ctx;
-    struct wish_rpc_context_list_elem *next;
-} rpc_server_req_list;
 
 typedef void (*rpc_op_handler)(rpc_server_req* rpc_ctx, const uint8_t* args);
 
@@ -164,12 +161,12 @@ typedef struct wish_rpc_server {
     /** Send function for sending data back to the client */
     rpc_server_send_cb send;    
     /** A list representing the requests that have arrived to the RPC server. Used in for example to emit 'sig' responses */
-    rpc_server_req_list* requests;
+    rpc_server_req* requests;
     /** Access control implementation */
     rpc_acl_check_handler acl_check;
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
     /** RPC contexts of incoming requests are stored to this pool */
-    rpc_server_req_list* rpc_ctx_pool;
+    rpc_server_req* rpc_ctx_pool;
     /** The number of slots in the rpc_ctx_pool */
     int rpc_ctx_pool_num_slots;
 #endif
@@ -241,7 +238,7 @@ int wish_rpc_passthru_req(rpc_server_req* server_rpc_ctx, rpc_client* client, bs
 
 int wish_rpc_client_handle_res(rpc_client *c, void *ctx, const uint8_t *data, size_t len);
 
-rpc_server_req_list* wish_rpc_server_get_free_rpc_ctx_elem(rpc_server *s);
+rpc_server_req* wish_rpc_server_get_free_req(rpc_server *s);
 
 void wish_rpc_server_print(rpc_server *s);
 
