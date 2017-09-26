@@ -587,7 +587,7 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
 
 static int wish_rpc_server_send2(rpc_server_req* req, const uint8_t* response, size_t response_len, const char* type, bool delete) {
 
-    if (req->id == 0) {
+    if (req->id == 0 && delete) {
         // we should not send any response, just delete the request
         wish_rpc_server_delete_rpc_ctx(req);
         return 0;
