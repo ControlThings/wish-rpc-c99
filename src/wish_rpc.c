@@ -894,24 +894,22 @@ void wish_rpc_server_end(rpc_server *s, int id) {
     }
 }
 
-void wish_rpc_server_end_by_ctx(rpc_server *s, void* ctx) {
-    rpc_server_req* req = NULL;
-    /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
+void wish_rpc_server_end_by_ctx(rpc_server* server, void* ctx) {
     rpc_server_req* elm;
-    LL_FOREACH(s->requests, elm) {
+    rpc_server_req* tmp;
+    
+    LL_FOREACH_SAFE(server->requests, elm, tmp) {
         if (elm->ctx == ctx) {
-            req = elm;
+            rpc_server_req* req = elm;
             
             if(req->end != NULL) { req->end(req); }
             wish_rpc_server_delete_rpc_ctx(req);
-            //WISHDEBUG(LOG_CRITICAL, "RPC server %s cleaned up request with id: %i and ctx pointer: %p.", s->name, req->id, ctx);
         }
     }
 }
 
 
 void wish_rpc_server_end_by_context(rpc_server* server, void* context) {
-    /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
     rpc_server_req* elm;
     rpc_server_req* tmp;
     
