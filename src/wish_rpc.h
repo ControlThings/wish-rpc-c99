@@ -127,6 +127,7 @@ typedef struct wish_rpc_request {
 } wish_rpc_req;
 
 typedef struct wish_rpc_client {
+    char* name;
     /** context used to store wish_core_t in wish implementation */
     void* context;
     /** This is the ID that will be used in next req */
