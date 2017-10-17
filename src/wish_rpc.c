@@ -501,10 +501,11 @@ void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const
         if ( bson_find_fieldpath_value("end", &it) != BSON_INT ) {
             bson_visit("There was no 'op' or 'end':", data);
             return;
-        } else {
-            wish_rpc_server_end(server, end);
-            return;
         }
+        
+        end = bson_iterator_int(&it);
+        wish_rpc_server_end(server, end);
+        return;
     }
     
     const char* op = bson_iterator_string(&it);
