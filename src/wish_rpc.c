@@ -59,28 +59,29 @@ void wish_rpc_server_set_name(rpc_server* server, const char* name) {
  * @param cb
  * @return 
  */
-static wish_rpc_id_t create_request_entry(rpc_client *c, rpc_client_callback cb) {
+static rpc_client_req* create_request_entry(rpc_client* client, rpc_client_callback cb, void* cb_context) {
     rpc_client_req* req = wish_platform_malloc(sizeof (rpc_client_req));
 
     if (req == NULL) {
         WISHDEBUG(LOG_CRITICAL, "malloc fail");
-        return 0;
+        return NULL;
     } 
 
     memset(req, 0, sizeof (rpc_client_req));
 
-    req->client = c;
+    req->client = client;
 
     // ensure rpc will not send a request with reqest id 0.
-    if (c->next_id == 0) { c->next_id++; }
+    if (client->next_id == 0) { client->next_id++; }
 
-    req->id = c->next_id++;
+    req->id = client->next_id++;
     req->cb = cb;
-    if (c->requests == NULL) {
+    req->cb_context = cb_context;
+    if (client->requests == NULL) {
         /* list empty. Put new node as first on the list */
-        c->requests = req;
+        client->requests = req;
     } else {
-        rpc_client_req* entry = c->requests;
+        rpc_client_req* entry = client->requests;
         while (entry->next != NULL) {
             entry = entry->next;
         }
@@ -88,7 +89,7 @@ static wish_rpc_id_t create_request_entry(rpc_client *c, rpc_client_callback cb)
         /* Save new request at end of list */
         entry->next = req;
     }
-    return req->id;
+    return req;
 }
 
 rpc_client_req* find_request_entry(rpc_client* client, wish_rpc_id_t id) {
@@ -176,56 +177,25 @@ static void delete_request_entry(rpc_client *c, wish_rpc_id_t id) {
     }
 }
 
-wish_rpc_id_t wish_rpc_client_bson(rpc_client* c, const char* op, 
-        const uint8_t* args_array, size_t args_len, rpc_client_callback cb,
-        uint8_t* buffer, size_t buffer_len) {
+rpc_client_req* wish_rpc_client_request(rpc_client* client, bson* req, rpc_client_callback cb, void* cb_context) {
+    if (cb == NULL) { WISHDEBUG(LOG_CRITICAL, "cb == NULL"); return 0; }
     
-    bson bs;
-    bson_init_buffer(&bs, buffer, buffer_len);
-    bson_append_string(&bs, "op", op);
+    // FIXME Do checks on req to validate its content
     
-    if (args_len == 0 || args_array == NULL) {
-        bson_append_start_array(&bs, "args");
-        bson_append_finish_array(&bs);
-    } else {
-        bson_iterator it;
-        bson_find_from_buffer(&it, args_array, "args");
-        if(bson_iterator_type(&it) != BSON_ARRAY) {
-            // args property must be array
-            WISHDEBUG(LOG_CRITICAL, "Dumping request! Args property must be array!");
-            return 0;
-        }
-        bson_append_element(&bs, "args", &it);
-    }
+    bson_iterator it;
     
-    wish_rpc_id_t id = 0;
-    
-    if (cb != NULL) {
-        id = create_request_entry(c, cb);
-        bson_append_int(&bs, "id", id);
-    }
-    
-    if (bs.err) {
-        WISHDEBUG(LOG_CRITICAL, "wish_rpc_client_bson error writing bson");
+    if ( BSON_INT != bson_find(&it, req, "id") ) { 
+        WISHDEBUG(LOG_CRITICAL, "There was no id field in request, bailing out");
         return 0;
     }
     
-    bson_finish(&bs);
-
+    rpc_client_req* creq = create_request_entry(client, cb, cb_context);
     
-    // show active requests
+    if (creq == NULL) { return NULL; }
     
-    WISHDEBUG(LOG_CRITICAL, "rpc_client %p, looking for id: %d", c, id);
+    bson_inplace_set_long(&it, creq->id);
     
-    rpc_client_req* entry = c->list_head;
-    while (entry != NULL) {
-        WISHDEBUG(LOG_CRITICAL, "  entry: %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
-        entry = entry->next;
-    }
-    
-    //bson_visit("wish_app_core: BSON Dump", bs.data);
-    
-    return id;
+    return creq;
 }
 
 void wish_rpc_client_end_by_ctx(rpc_client *c, void* ctx) {
@@ -379,18 +349,17 @@ static void wish_rpc_passthru_req_cb(rpc_client_req* req, void* ctx, const uint8
     }
 }
 
-int wish_rpc_passthru(rpc_client* client, bson* bs, rpc_client_callback cb) {
-    return wish_rpc_passthru_context(client, bs, cb, NULL);
-}
-
-int wish_rpc_passthru_context(rpc_client* client, const bson* bs, rpc_client_callback cb, void* ctx) {
+rpc_client_req* wish_rpc_passthru_context(rpc_client* client, const bson* bs, rpc_client_callback cb, void* ctx) {
     if(client->send == NULL) {
         WISHDEBUG(LOG_CRITICAL, "Passthru has no send function");
         return 0;
     }
     
-    wish_rpc_id_t id = create_request_entry(client, wish_rpc_passthru_cb);
-    rpc_client_req* e = find_request_entry(client, id);
+    rpc_client_req* req = create_request_entry(client, wish_rpc_passthru_cb, client);
+    
+    if (req == NULL) { return 0; }
+    
+    wish_rpc_id_t id = req->id;
     
     int len = bson_size(bs);
     uint8_t buffer[len];
@@ -401,15 +370,14 @@ int wish_rpc_passthru_context(rpc_client* client, const bson* bs, rpc_client_cal
     
     bson_iterator it;
     bson_find_from_buffer(&it, buffer, "id");
-    e->passthru_id = bson_iterator_int(&it);
-    e->passthru_cb = cb;
+    req->passthru_id = bson_iterator_int(&it);
+    req->passthru_cb = cb;
     
     //WISHDEBUG(LOG_CRITICAL, "Passthru setting cb_context to client pointer: %p", client);
-    e->cb_context = client;
-    e->passthru_ctx2 = ctx;
+    req->passthru_ctx2 = ctx;
 
     // FIXME: the passthrough context should probably be removed when each peer gets its own rpc_client
-    e->passthru_ctx = client->send_ctx;
+    req->passthru_ctx = client->send_ctx;
 
     bson_inplace_set_long(&it, id);
     
@@ -417,17 +385,20 @@ int wish_rpc_passthru_context(rpc_client* client, const bson* bs, rpc_client_cal
     //bson_visit("Switched id in passthru:", buffer);
     
     client->send(client->send_ctx, buffer, len);
-    return id;
+    return req;
 }
 
-int wish_rpc_passthru_req(rpc_server_req* req, rpc_client* client, bson* bs, rpc_client_callback cb) {
+rpc_client_req* wish_rpc_passthru_req(rpc_server_req* req, rpc_client* client, bson* bs, rpc_client_callback cb) {
     if(client->send == NULL) {
         WISHDEBUG(LOG_CRITICAL, "Passthru has no send function");
         return 0;
     }
     
-    wish_rpc_id_t id = create_request_entry(client, wish_rpc_passthru_req_cb);
-    rpc_client_req* e = find_request_entry(client, id);
+    rpc_client_req* creq = create_request_entry(client, wish_rpc_passthru_req_cb, req);
+
+    if (creq == NULL) { return NULL; }
+
+    wish_rpc_id_t id = creq->id;
     
     int len = bson_size(bs);
     uint8_t buffer[len];
@@ -436,18 +407,16 @@ int wish_rpc_passthru_req(rpc_server_req* req, rpc_client* client, bson* bs, rpc
 
     bson_iterator it;
     bson_find_from_buffer(&it, buffer, "id");
-    e->passthru_id = bson_iterator_int(&it);
-    e->passthru_cb = cb;
-    
-    e->cb_context = req;
+    creq->passthru_id = bson_iterator_int(&it);
+    creq->passthru_cb = cb;
     
     // FIXME: the passthrough context should probably be removed when each peer gets its own rpc_client
-    e->passthru_ctx = client->send_ctx;
+    creq->passthru_ctx = client->send_ctx;
 
     bson_inplace_set_long(&it, id);
     
     client->send(client->send_ctx, buffer, len);
-    return id;
+    return creq;
 }
 
 

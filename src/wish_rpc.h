@@ -223,7 +223,7 @@ rpc_client_req* find_request_entry(rpc_client* client, wish_rpc_id_t id);
 
 rpc_client_req* find_passthrough_request_entry(rpc_client* client, wish_rpc_id_t id);
 
-wish_rpc_id_t wish_rpc_client_bson(rpc_client* client, const char* op, const uint8_t *args, size_t args_len, rpc_client_callback cb, uint8_t *buffer, size_t buffer_len);
+rpc_client_req* wish_rpc_client_request(rpc_client* client, bson* req, rpc_client_callback cb, void* cb_context);
 
 void wish_rpc_client_end_by_ctx(rpc_client* client, void* ctx);
 
@@ -231,11 +231,9 @@ void wish_rpc_client_end_by_id(rpc_client* client, int id);
 
 void wish_rpc_client_set_cb_context(rpc_client* client, int id, void* ctx);
 
-int wish_rpc_passthru_context(rpc_client* client, const bson* bs, rpc_client_callback cb, void* ctx);
+rpc_client_req* wish_rpc_passthru_context(rpc_client* client, const bson* bs, rpc_client_callback cb, void* ctx);
 
-int wish_rpc_passthru(rpc_client* client, bson* bs, rpc_client_callback cb);
-
-int wish_rpc_passthru_req(rpc_server_req* server_rpc_ctx, rpc_client* client, bson* bs, rpc_client_callback cb);
+rpc_client_req* wish_rpc_passthru_req(rpc_server_req* server_rpc_ctx, rpc_client* client, bson* bs, rpc_client_callback cb);
 
 int wish_rpc_client_handle_res(rpc_client *c, void *ctx, const uint8_t *data, size_t len);
 
