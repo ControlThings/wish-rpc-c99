@@ -186,7 +186,7 @@ rpc_client_req* wish_rpc_client_request(rpc_client* client, bson* req, rpc_clien
     
     if ( BSON_INT != bson_find(&it, req, "id") ) { 
         WISHDEBUG(LOG_CRITICAL, "There was no id field in request, bailing out");
-        return 0;
+        return NULL;
     }
     
     rpc_client_req* creq = create_request_entry(client, cb, cb_context);
