@@ -12,7 +12,7 @@ extern "C" {
  * A generic RPC client and server implementation 
  */
 
-typedef int32_t wish_rpc_id_t;
+typedef int32_t rpc_id;
 
 struct wish_rpc_server;
 struct wish_rpc_context;
@@ -43,13 +43,6 @@ typedef struct wish_rpc_context {
     /** Request ID */
     int id;
     /** 
-     * This field is for saving local service id, used in following situations:
-     *      -when handling a "core app" rpc to determine which service called 
-     *      the RPC
-     *      -in mist device app, the local service which is the destination of an incoming Mist RPC command is saved here so that the RPC handler can use it for determining which mist device is  the recipient of the RPC 
-     */
-    uint8_t local_wsid[32];
-    /** 
      * The originating wish context of the message, used in core rpc
      * server, send_op_handler(). 
      */
@@ -64,11 +57,12 @@ typedef struct wish_rpc_context {
     struct wish_rpc_context* next;
 } rpc_server_req;
 
-struct wish_rpc_entry;
+typedef struct wish_rpc_client rpc_client;
+typedef struct wish_rpc_entry rpc_client_req;
 
-typedef void (*rpc_client_callback)(struct wish_rpc_entry* req, void *ctx, const uint8_t *payload, size_t payload_len);
+typedef void (*rpc_client_callback)(rpc_client_req* req, void *ctx, const uint8_t *payload, size_t payload_len);
 
-typedef void (*rpc_op_handler)(rpc_server_req* rpc_ctx, const uint8_t* args);
+typedef void (*rpc_op_handler)(rpc_server_req* req, const uint8_t* args);
 
 
 /**
@@ -95,11 +89,9 @@ typedef void (*rpc_acl_check_decision_cb)(rpc_server_req* req, bool allowed);
  */
 typedef void (*rpc_acl_check_handler)(rpc_server_req* req, const uint8_t* resource, const uint8_t* permission, void* ctx, rpc_acl_check_decision_cb decision);
 
-struct wish_rpc_client;
-
-typedef struct wish_rpc_entry {
+struct wish_rpc_entry {
     struct wish_rpc_client* client;
-    wish_rpc_id_t id;
+    rpc_id id;
     rpc_client_callback cb;
     void* cb_context;
     rpc_client_callback passthru_cb;
@@ -108,12 +100,12 @@ typedef struct wish_rpc_entry {
     void* passthru_ctx;
     /** used for storing Mist pointer in nodejs addon */
     void* passthru_ctx2; 
-    struct wish_rpc_entry *next;
+    rpc_client_req* next;
     bool err;
-} rpc_client_req;
+};
 
 typedef struct wish_rpc_request {
-    wish_rpc_id_t id;
+    rpc_id id;
     
     /**
      *  context used for sending replies, is a: 
@@ -126,35 +118,39 @@ typedef struct wish_rpc_request {
     rpc_client_req* next;
 } wish_rpc_req;
 
-typedef struct wish_rpc_client {
+struct wish_rpc_client {
     char* name;
     /** context used to store wish_core_t in wish implementation */
     void* context;
     /** This is the ID that will be used in next req */
-    wish_rpc_id_t next_id;
+    rpc_id next_id;
     /** Pointer to first request */
     rpc_client_req* requests;
     /** Send function for client */
     void (*send)(void* ctx, uint8_t* buffer, int buffer_len);
     /** Send function context */
     void* send_ctx;
-} rpc_client;
+};
+
+typedef struct wish_rpc_server_handler rpc_handler;
 
 /** This struct encapsulates a Wish RPC server op handler */
-typedef struct wish_rpc_server_handler {
+struct wish_rpc_server_handler {
     /** the operation that this handler handles */
     char op[MAX_RPC_OP_LEN];
     char* doc;
     char* args;
     rpc_op_handler handler;
-    struct wish_rpc_server_handler *next;
-} rpc_handler;
+    rpc_handler *next;
+};
 
 /* If WISH_RPC_SERVER_STATIC_REQUEST_POOL is defined, you must supply the RPC server with a statically allocated buffer for storing wish_rpc_ctx structures.
  You must also initialise wish_rpc_server_t.rpc_ctx_pool_num_slots accordingly. */
 //#define WISH_RPC_SERVER_STATIC_REQUEST_POOL
 
-typedef struct wish_rpc_server {
+typedef struct wish_rpc_server rpc_server;
+
+struct wish_rpc_server {
     char name[MAX_RPC_SERVER_NAME_LEN];
     rpc_handler* handlers;
     /** Server context */
@@ -171,75 +167,65 @@ typedef struct wish_rpc_server {
     /** The number of slots in the rpc_ctx_pool */
     int rpc_ctx_pool_num_slots;
 #endif
-} rpc_server;
+};
 
-rpc_server* wish_rpc_server_init(void* context, rpc_server_send_cb cb);
+/* Server functions */
 
-rpc_server* wish_rpc_server_init_size(void* context, rpc_server_send_cb cb, int size);
+rpc_server* rpc_server_init(void* context, rpc_server_send_cb cb);
+
+rpc_server* rpc_server_init_size(void* context, rpc_server_send_cb cb, int size);
+
+void rpc_server_destroy(rpc_server* server);
 
 // acl_check(resource, acl, context, cb) { cb(err, allowed, permissions) }
 
-void wish_rpc_server_set_acl(rpc_server* server, rpc_acl_check_handler acl);
+void rpc_server_set_acl(rpc_server* server, rpc_acl_check_handler acl);
 
-void wish_rpc_server_set_name(rpc_server* server, const char* name);
+void rpc_server_set_name(rpc_server* server, const char* name);
 
-void wish_rpc_server_register(rpc_server* server, rpc_handler* handler);
+void rpc_server_register(rpc_server* server, rpc_handler* handler);
 
-/**
- * Handle an RPC request to an RPC server
- * 
- * Returns 0, if the request was valid, and 1 if there was no handler to this "op" 
- * 
- * @param s the RPC server instance
- * @param rpc_ctx the RPC request context, NOTE: it must be obtained via wish_rpc_server_get_free_rpc_ctx_elem()
- * @param args the request argument BSON array
- * @return 0 for success, 1 for fail
- */
-int wish_rpc_server_handle(rpc_server* server, rpc_server_req* req, const uint8_t* args);
+void rpc_server_end(rpc_server* server, int end);
 
-void wish_rpc_server_end(rpc_server* server, int end);
+void rpc_server_end_by_ctx(rpc_server* server, void* ctx);
 
-void wish_rpc_server_end_by_ctx(rpc_server* server, void* ctx);
+void rpc_server_end_by_context(rpc_server* server, void* context);
 
-void wish_rpc_server_end_by_context(rpc_server* server, void* context);
+void rpc_server_receive(rpc_server* server, void* ctx, void* context, const bson* msg);
 
-void wish_rpc_server_receive(rpc_server* server, void* ctx, void* context, const bson* msg);
+int rpc_server_send(rpc_server_req* req, const uint8_t *response, size_t response_len);
 
-int wish_rpc_server_send(rpc_server_req* req, const uint8_t *response, size_t response_len);
+int rpc_server_emit(rpc_server_req* req, const uint8_t *response, size_t response_len);
 
-int wish_rpc_server_emit(rpc_server_req* req, const uint8_t *response, size_t response_len);
+int rpc_server_error(rpc_server_req* req, const uint8_t *response, size_t response_len);
 
-int wish_rpc_server_error(rpc_server_req* req, const uint8_t *response, size_t response_len);
+int rpc_server_error_msg(rpc_server_req* req, int code, const uint8_t *msg);
 
-int wish_rpc_server_error_msg(rpc_server_req* req, int code, const uint8_t *msg);
+rpc_server_req* rpc_server_req_by_id(rpc_server* s, int id);
 
-rpc_server_req* wish_rpc_server_req_by_id(rpc_server* s, int id);
+void rpc_server_emit_broadcast(rpc_server* s, char* op, const uint8_t *response, size_t response_len);
 
-void wish_rpc_server_emit_broadcast(rpc_server* s, char* op, const uint8_t *response, size_t response_len);
+void rpc_server_delete_rpc_ctx(rpc_server_req* req);
 
-void wish_rpc_server_delete_rpc_ctx(rpc_server_req* req);
+rpc_client_req* rpc_server_passthru(rpc_server_req* server_rpc_ctx, rpc_client* client, bson* bs, rpc_client_callback cb);
 
-rpc_client_req* find_request_entry(rpc_client* client, wish_rpc_id_t id);
+void rpc_server_print(rpc_server *s);
 
-rpc_client_req* find_passthrough_request_entry(rpc_client* client, wish_rpc_id_t id);
+/* Client functions */
 
-rpc_client_req* wish_rpc_client_request(rpc_client* client, bson* req, rpc_client_callback cb, void* cb_context);
+rpc_client_req* rpc_client_find_req(rpc_client* client, rpc_id id);
 
-void wish_rpc_client_end_by_ctx(rpc_client* client, void* ctx);
+rpc_client_req* rpc_client_find_passthru_req(rpc_client* client, rpc_id id);
 
-void wish_rpc_client_end_by_id(rpc_client* client, int id);
+rpc_client_req* rpc_client_request(rpc_client* client, bson* req, rpc_client_callback cb, void* cb_context);
 
-void wish_rpc_client_set_cb_context(rpc_client* client, int id, void* ctx);
+void rpc_client_end_by_ctx(rpc_client* client, void* ctx);
 
-rpc_client_req* wish_rpc_passthru_context(rpc_client* client, const bson* bs, rpc_client_callback cb, void* ctx);
+void rpc_client_end_by_id(rpc_client* client, int id);
 
-rpc_client_req* wish_rpc_passthru_req(rpc_server_req* server_rpc_ctx, rpc_client* client, bson* bs, rpc_client_callback cb);
+rpc_client_req* rpc_client_passthru(rpc_client* client, const bson* bs, rpc_client_callback cb, void* ctx);
 
-int wish_rpc_client_handle_res(rpc_client *c, void *ctx, const uint8_t *data, size_t len);
-
-rpc_server_req* wish_rpc_server_get_free_req(rpc_server *s);
-
-void wish_rpc_server_print(rpc_server *s);
+int rpc_client_receive(rpc_client *c, void *ctx, const uint8_t *data, size_t len);
 
 #ifdef __cplusplus
 }
