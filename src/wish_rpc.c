@@ -77,7 +77,8 @@ static int rpc_server_handle(rpc_server* server, rpc_server_req* req, const uint
                 handler->handler(req, args);
                 
                 if (req->id == 0) {
-                    rpc_server_delete_rpc_ctx(server, req);
+                    WISHDEBUG(LOG_CRITICAL, "Deleting request %p %s because we're done and response was not expexted", req, req->op);
+                    rpc_server_delete_rpc_ctx(req);
                 }
                 
                 return 0;
@@ -484,7 +485,7 @@ void rpc_server_delete_rpc_ctx(rpc_server_req* req) {
             LL_DELETE(req->server->requests, elm);
             
 #ifdef WISH_RPC_SERVER_STATIC_REQUEST_POOL
-            memset(req->op, 0, MAX_RPC_OP_LEN);
+            req->op = NULL;
 #else
             wish_platform_free(req);
 #endif
@@ -586,7 +587,7 @@ void rpc_server_receive(rpc_server* server, void* ctx, void* context, const bson
         rpc_server_req* req = request;
         req->server = server;
         req->send_context = req;
-        strncpy(req->op, op, MAX_RPC_OP_LEN);
+        req->op = op;
         req->id = id;
         req->ctx = ctx;
         req->context = context;
