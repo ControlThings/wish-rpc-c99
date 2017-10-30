@@ -543,6 +543,8 @@ void rpc_server_receive(rpc_server* server, void* ctx, void* context, const bson
         bson_init_buffer(&bs, empty_args, empty_args_len);
         bson_append_start_array(&bs, "args");
         bson_append_finish_array(&bs);
+        bson_finish(&bs);
+        args = bson_data(&bs);
     } else {
         args = bson_iterator_value(&it);
     }
