@@ -103,7 +103,7 @@ struct wish_rpc_entry {
     bool err;
 };
 
-typedef struct wish_rpc_request {
+struct wish_rpc_request {
     rpc_id id;
     
     /**
@@ -115,7 +115,7 @@ typedef struct wish_rpc_request {
     void* response_context;
     
     rpc_client_req* next;
-} wish_rpc_req;
+};
 
 struct wish_rpc_client {
     char* name;
@@ -210,11 +210,11 @@ void rpc_server_print(rpc_server* server);
 
 /* Client functions */
 
+rpc_client_req* rpc_client_request(rpc_client* client, bson* req, rpc_client_callback cb, void* cb_context);
+
 rpc_client_req* rpc_client_find_req(rpc_client* client, rpc_id id);
 
 rpc_client_req* rpc_client_find_passthru_req(rpc_client* client, rpc_id id);
-
-rpc_client_req* rpc_client_request(rpc_client* client, bson* req, rpc_client_callback cb, void* cb_context);
 
 void rpc_client_end_by_ctx(rpc_client* client, void* ctx);
 

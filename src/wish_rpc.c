@@ -390,7 +390,7 @@ static void rpc_passthru_req_cb(rpc_client_req* req, void* ctx, const uint8_t* p
     cb(req, req->cb_context, payload, payload_len);
     
     if (end) {
-        rpc_server_delete_req(req->cb_context);
+        //rpc_server_delete_req(req->cb_context);
     }
 }
 
