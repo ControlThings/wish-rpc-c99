@@ -89,7 +89,7 @@ typedef void (*rpc_acl_check_decision_cb)(rpc_server_req* req, bool allowed);
 typedef void (*rpc_acl_check_handler)(rpc_server_req* req, const uint8_t* resource, const uint8_t* permission, void* ctx, rpc_acl_check_decision_cb decision);
 
 struct wish_rpc_entry {
-    struct wish_rpc_client* client;
+    rpc_client* client;
     rpc_id id;
     rpc_client_callback cb;
     void* cb_context;
@@ -101,6 +101,7 @@ struct wish_rpc_entry {
     void* passthru_ctx2; 
     rpc_client_req* next;
     bool err;
+    bool sig;
 };
 
 struct wish_rpc_request {

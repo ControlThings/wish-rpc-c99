@@ -761,6 +761,7 @@ int rpc_client_receive(rpc_client* c, void* ctx, const uint8_t* data, size_t dat
         }
         
         rpc_entry->err = err;
+        rpc_entry->sig = sig;
         
         if (rpc_entry->cb != NULL) {
             rpc_entry->cb(rpc_entry, ctx, data, data_len);
