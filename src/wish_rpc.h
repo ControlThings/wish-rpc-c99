@@ -221,6 +221,8 @@ void rpc_client_end_by_ctx(rpc_client* client, void* ctx);
 
 void rpc_client_end_by_id(rpc_client* client, int id);
 
+void rpc_client_passthru_end_by_id(rpc_client* client, int id);
+
 rpc_client_req* rpc_client_passthru(rpc_client* client, const bson* bs, rpc_client_callback cb, void* ctx);
 
 int rpc_client_receive(rpc_client *c, void *ctx, const uint8_t *data, size_t len);

@@ -305,6 +305,31 @@ void rpc_client_end_by_id(rpc_client* client, int id) {
     }
 }
 
+void rpc_client_passthru_end_by_id(rpc_client* client, int id) {
+    rpc_client_req* entry = client->requests;
+    
+    while (entry != NULL) {
+        if (entry->passthru_id == id) {
+            int buffer_len = 200;
+            char buffer[buffer_len];
+
+            bson bs;
+            bson_init_buffer(&bs, buffer, buffer_len);
+            bson_append_int(&bs, "end", entry->id);
+            bson_finish(&bs);
+            
+            client->send(client->send_ctx, (uint8_t*) bson_data(&bs), bson_size(&bs));
+            
+            // FIXME wait for fin, to delete, now we just delete when sending end.
+            delete_request_entry(client, entry->id);
+            //break;
+        } else {
+            //WISHDEBUG(LOG_CRITICAL, "  spare:  %i cb %p ctx: %p", entry->id, entry->cb, entry->cb_context);
+        }
+        entry = entry->next;
+    }
+}
+
 static void rpc_passthru_cb(rpc_client_req* req, void* ctx, const uint8_t* payload, size_t payload_len) {
     bool end = false;
     
