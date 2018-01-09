@@ -544,7 +544,8 @@ void rpc_server_receive(rpc_server* server, void* ctx, void* context, const bson
     if (bson_find_fieldpath_value("op", &it) != BSON_STRING) {
         bson_iterator_from_buffer(&it, data);
         if ( bson_find_fieldpath_value("end", &it) != BSON_INT ) {
-            bson_visit("There was no 'op' or 'end':", data);
+            WISHDEBUG(LOG_CRITICAL, "rpc_server_receive: %s (no op or end)", server->name);
+            bson_visit("rpc_server_receive: no 'op' or 'end':", data);
             return;
         }
         
