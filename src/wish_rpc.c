@@ -727,6 +727,14 @@ int rpc_server_error_msg(rpc_server_req* req, int code, const uint8_t *msg) {
     return 0;
 }
 
+/**
+ * Request is done from the server side
+ */
+/* { data: bson_element fin: req_id } */
+int rpc_server_fin(rpc_server_req* req) {
+    return rpc_server_send2(req, NULL, 0, "fin", true);
+}
+
 void rpc_server_emit_broadcast(rpc_server* server, char* op, const uint8_t *data, size_t data_len) {
     /* Traverse the list of requests in the given server, and for each request where op_str equals given op, emit the data */
     rpc_server_req* req;
@@ -782,12 +790,15 @@ int rpc_client_receive(rpc_client* c, void* ctx, const uint8_t* data, size_t dat
     } else {
         
         if (fin) {
+            rpc_entry->fin = true;
+            rpc_entry->cb(rpc_entry, ctx, data, data_len);
             delete_request_entry(c, id);
             return retval;
         }
         
         rpc_entry->err = err;
         rpc_entry->sig = sig;
+        rpc_entry->fin = fin;
         
         if (rpc_entry->cb != NULL) {
             rpc_entry->cb(rpc_entry, ctx, data, data_len);
@@ -870,9 +881,11 @@ void rpc_server_end(rpc_server *server, int id) {
     if (req != NULL) {
         /* Call the end handler if it is set */
         if(req->end != NULL) { req->end(req); }
+        
+        rpc_server_fin(req);
 
         /* Delete the request context */
-        rpc_server_delete_req(req);
+        //rpc_server_delete_req(req);
     } else {
         WISHDEBUG(LOG_DEBUG, "RPC server %s has no request with id: %i.", server->name, id);
     }

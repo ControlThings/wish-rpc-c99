@@ -102,6 +102,7 @@ struct wish_rpc_entry {
     rpc_client_req* next;
     bool err;
     bool sig;
+    bool fin;
 };
 
 struct wish_rpc_request {
@@ -198,6 +199,8 @@ int rpc_server_emit(rpc_server_req* req, const uint8_t *response, size_t respons
 int rpc_server_error(rpc_server_req* req, const uint8_t *response, size_t response_len);
 
 int rpc_server_error_msg(rpc_server_req* req, int code, const uint8_t *msg);
+
+int rpc_server_fin(rpc_server_req* req);
 
 rpc_server_req* rpc_server_req_by_id(rpc_server* server, int id);
 
