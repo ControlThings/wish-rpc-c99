@@ -784,8 +784,10 @@ int rpc_client_receive(rpc_client* c, void* ctx, const uint8_t* data, size_t dat
     rpc_client_req* rpc_entry = rpc_client_find_req(c, id);
     
     if (rpc_entry == NULL) {
-        WISHDEBUG(LOG_CRITICAL, "No RPC entry for id %d %s", id, c->name);
-        bson_visit("No RPC entry for id", data);
+        if (!fin) {
+            WISHDEBUG(LOG_CRITICAL, "No RPC entry for id %d %s", id, c->name);
+            bson_visit("No RPC entry for id", data);
+        }
         retval = 1;
     } else {
         
