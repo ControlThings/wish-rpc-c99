@@ -508,6 +508,9 @@ void rpc_server_delete_req(rpc_server_req* req) {
     LL_FOREACH_SAFE(req->server->requests, elm, tmp) {
         if (elm == req) {
             //WISHDEBUG(LOG_CRITICAL, "Deleting rpc ctx");
+
+            /* Call the end handler if it is set */
+            if(req->end != NULL) { req->end(req); }
            
             LL_DELETE(req->server->requests, elm);
             
@@ -881,13 +884,9 @@ void rpc_server_end(rpc_server *server, int id) {
     }    
     
     if (req != NULL) {
-        /* Call the end handler if it is set */
-        if(req->end != NULL) { req->end(req); }
-        
         rpc_server_fin(req);
 
-        /* Delete the request context */
-        //rpc_server_delete_req(req);
+        /* Note: Request context will be deleted after 'fin' is sent */
     } else {
         WISHDEBUG(LOG_DEBUG, "RPC server %s has no request with id: %i.", server->name, id);
     }
@@ -900,8 +899,7 @@ void rpc_server_end_by_ctx(rpc_server* server, void* ctx) {
     LL_FOREACH_SAFE(server->requests, elm, tmp) {
         if (elm->ctx == ctx) {
             rpc_server_req* req = elm;
-            
-            if(req->end != NULL) { req->end(req); }
+
             rpc_server_delete_req(req);
         }
     }
@@ -916,9 +914,6 @@ void rpc_server_end_by_context(rpc_server* server, void* context) {
 
         if (elm->context == context) {
             rpc_server_req* req = elm;
-            
-            /* Call the end handler if it is set */
-            if(req->end != NULL) { req->end(req); }
 
             /* Delete the request context */
             rpc_server_delete_req(req);
