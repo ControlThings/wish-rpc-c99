@@ -49,6 +49,8 @@ struct wish_rpc_context {
     const char* args;
     /** Request ID */
     int id;
+    /** Server unique id */
+    int sid;
     /** 
      * The originating wish context of the message, used in core rpc
      * server, send_op_handler(). 
@@ -152,6 +154,8 @@ struct wish_rpc_server_handler {
 struct wish_rpc_server {
     char name[MAX_RPC_SERVER_NAME_LEN];
     rpc_handler* handlers;
+    /** unique request id */
+    int rid;
     /** Server context */
     void* context;
     /** Send function for sending data back to the client */
@@ -203,6 +207,8 @@ int rpc_server_error_msg(rpc_server_req* req, int code, const uint8_t *msg);
 int rpc_server_fin(rpc_server_req* req);
 
 rpc_server_req* rpc_server_req_by_id(rpc_server* server, int id);
+
+rpc_server_req* rpc_server_req_by_sid(rpc_server* server, int sid);
 
 void rpc_server_emit_broadcast(rpc_server* server, char* op, const uint8_t *response, size_t response_len);
 

@@ -622,6 +622,7 @@ void rpc_server_receive(rpc_server* server, void* ctx, void* context, const bson
         req->server = server;
         req->send_context = req;
         req->id = id;
+        req->sid = ++server->rid;
         req->ctx = ctx;
         req->context = context;
         req->args = args;
@@ -665,8 +666,6 @@ static int rpc_server_send2(rpc_server_req* req, const uint8_t* response, size_t
         
         if (bt != BSON_EOO) {
             bson_append_element(&bs, "data", &it);
-        } else {
-            WISHDEBUG(LOG_CRITICAL, "Unsupported bson type %i in wish_rpc_server_send2", bt);
         }
 
         bson_append_int(&bs, type, req->id);
@@ -864,6 +863,19 @@ rpc_server_req* rpc_server_req_by_id(rpc_server* server, int id) {
     LL_FOREACH(server->requests, req) {
 
         if (req->id == id) {
+            return req;
+            break;
+        }
+    }
+
+    return NULL;
+}
+
+rpc_server_req* rpc_server_req_by_sid(rpc_server* server, int sid) {
+    rpc_server_req* req;
+    LL_FOREACH(server->requests, req) {
+
+        if (req->sid == sid) {
             return req;
             break;
         }
