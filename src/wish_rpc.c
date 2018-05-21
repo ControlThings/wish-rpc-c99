@@ -820,6 +820,10 @@ void rpc_server_register(rpc_server* server, rpc_handler* handler) {
     /* Find correct place to add the new handler new_h */
     rpc_handler* h = server->handlers;
 
+    /* Set the 'next' pointer to NULL on the handler to be added.
+     TODO: The purpose of this is to prevent an endless loop in case handler already has 'next' initialised. We will get rid of this by retiring "next" pointer on the handler, and put the handlers on a separate linked list instead. */
+    handler->next = NULL;
+
     if (h == NULL) {
         WISHDEBUG(LOG_DEBUG, "The RPC server %s does not have any handlers, adding first entry", server->name);
         server->handlers = handler;
