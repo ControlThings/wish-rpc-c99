@@ -221,6 +221,10 @@ static void delete_request_entry(rpc_client *c, rpc_id id) {
 
     /* Entry now points to entry with said id */
 
+    if (entry->cleanup != NULL) {
+        (entry->cleanup)(entry);
+    }
+
     if (prev != NULL) {
         rpc_client_req* tmp = entry;
         prev->next = entry->next;
