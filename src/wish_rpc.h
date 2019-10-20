@@ -105,6 +105,8 @@ struct wish_rpc_entry {
     bool err;
     bool sig;
     bool fin;
+    /** Clean-up function which is called when this request is removed from client's list of outstanding requests */
+    void (*cleanup)(rpc_client_req* req);
 };
 
 struct wish_rpc_request {
